@@ -2,13 +2,13 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { getAllDivision, getAllDistrict, getAllUnion } from 'bd-divisions-to-unions';
 import './AdminPanel.css';
 
-
 const AdminPanel = () => {
   const divisionMap = useMemo(() => {
     const obj = {};
     Object.values(getAllDivision('en')).forEach(d => { obj[d.value] = d.title; });
     return obj;
   }, []);
+  
   const districtMap = useMemo(() => {
     const obj = {};
     const all = getAllDistrict('en');
@@ -17,6 +17,7 @@ const AdminPanel = () => {
     });
     return obj;
   }, []);
+  
   const unionMap = useMemo(() => {
     const obj = {};
     const all = getAllUnion('en');
@@ -42,10 +43,11 @@ const AdminPanel = () => {
   const [products, setProducts] = useState([]);
   const [productError, setProductError] = useState('');
   const [loadingProducts, setLoadingProducts] = useState(true);
-console.log('vendors',vendors)
+
   useEffect(() => {
     loadVendors();
   }, []);
+  
   useEffect(() => {
     loadProducts();
   }, []);
@@ -57,7 +59,6 @@ console.log('vendors',vendors)
         throw new Error('Failed to fetch products');
       }
       const data = await response.json();
-      // Ensure we always have an array
       setProducts(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Error loading products:', error);
@@ -100,39 +101,60 @@ console.log('vendors',vendors)
         <div className="products-list">
           {products.map(product => (
             <div key={product.id} className="product-card">
-              <div className="product-info">
-                <h3>{product.name}</h3>
-                <p><strong>Vendor:</strong> {product.vendorName}</p>
-                <p><strong>Price:</strong> ${product.price}</p>
-                <p><strong>Stock:</strong> {product.stock} units</p>
-                <p><strong>Category:</strong> {product.category}</p>
+              <div className="product-header">
+                <h3 className="product-title">{product.name}</h3>
+                <div className="product-actions">
+                  <button
+                    className="approve-btn"
+                    onClick={() => handleProductApprove(product.id)}
+                  >
+                    Approve
+                  </button>
+                  <button
+                    className="decline-btn"
+                    onClick={() => handleProductDecline(product.id)}
+                  >
+                    Decline
+                  </button>
+                </div>
+              </div>
+              
+              <div className="product-content">
+                <div className="product-details">
+                  <div className="product-meta">
+                    <span className="meta-item">
+                      <strong>Vendor:</strong> {product.businessName}
+                    </span>
+                    <span className="meta-item">
+                      <strong>Price:</strong> ${product.unitPrice}
+                    </span>
+                    <span className="meta-item">
+                      <strong>Stock:</strong> {product.totalQty} units
+                    </span>
+                    <span className="meta-item">
+                      <strong>Category:</strong> {product.category}
+                    </span>
+                  </div>
+                  {product.description && (
+                    <p className="product-description">{product.description}</p>
+                  )}
+                </div>
+
                 {product.images?.length > 0 && (
                   <div className="product-images">
-                    {product.images.map((image, idx) => (
+                    {product.images.slice(0, 3).map((image, idx) => (
                       <img 
                         key={idx}
-                        src={`http://localhost:5005/uploads/${image}`} 
+                        src={image.startsWith('http') ? image : `http://localhost:5005/uploads/${image}`} 
                         alt={product.name} 
-                        style={{ width: '100px', height: '100px', objectFit: 'cover', marginRight: '10px' }} 
+                        className="product-image"
                       />
                     ))}
+                    {product.images.length > 3 && (
+                      <div className="more-images">+{product.images.length - 3}</div>
+                    )}
                   </div>
                 )}
-                <p><strong>Description:</strong> {product.description}</p>
-              </div>
-              <div className="product-actions">
-                <button
-                  className="approve-btn"
-                  onClick={() => handleProductApprove(product.id)}
-                >
-                  Approve
-                </button>
-                <button
-                  className="decline-btn"
-                  onClick={() => handleProductDecline(product.id)}
-                >
-                  Decline
-                </button>
               </div>
             </div>
           ))}
@@ -149,7 +171,6 @@ console.log('vendors',vendors)
       }
       const data = await response.json();
       setVendors(data);
-      console.log('vendors',data)
     } catch (error) {
       console.error('Error loading vendors:', error);
     } finally {
@@ -160,7 +181,7 @@ console.log('vendors',vendors)
   const handleApprove = async (vendorId) => {
     try {
       await fetch(`http://localhost:5005/api/vendors/approve/${vendorId}`, { method: 'PATCH' });
-      loadVendors(); // Reload the vendors list
+      loadVendors();
     } catch (error) {
       console.error('Error approving vendor:', error);
     }
@@ -203,11 +224,11 @@ console.log('vendors',vendors)
                         alt="Shop Logo" 
                         style={{ width: '150px', height: '150px', objectFit: 'cover' }} 
                       />
-                  </div>
+                    </div>
                   )}
                   {(vendor.kycDocument?.url || vendor.kycDocument?.filename) && (
                     <div className="document-preview">
-                      <h4 className='color-primary'>KYC Document:</h4>
+                      <h4>KYC Document:</h4>
                       <a 
                         href={vendor.kycDocument?.url ?? `http://localhost:5005/uploads/${vendor.kycDocument.filename}`} 
                         target="_blank" 
@@ -268,15 +289,12 @@ console.log('vendors',vendors)
         try {
           setStats(prev => ({ ...prev, loading: true }));
           
-          // Fetch all vendors (approved and pending)
           const vendorsRes = await fetch('http://localhost:5005/api/vendors');
           const allVendors = await vendorsRes.json();
           
-          // Fetch all clients
           const clientsRes = await fetch('http://localhost:5005/api/users');
           const allClients = await clientsRes.json();
           
-          // Calculate statistics
           const pendingVendors = allVendors.filter(v => !v.isApproved);
           const approvedVendors = allVendors.filter(v => v.isApproved);
           

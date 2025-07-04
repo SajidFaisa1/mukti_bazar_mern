@@ -26,6 +26,10 @@ const productSchema = new mongoose.Schema(
     barterAvailable: { type: Boolean, default: false },
     negotiationAvailable: { type: Boolean, default: false },
     shelfLife: { type: String, default: '' },
+    isApproved: { type: Boolean, default: false },
+    isFeatured: { type: Boolean, default: false },
+    isDeleted: { type: Boolean, default: false },
+    businessName: { type: String, required: true },
   },
   { timestamps: true }
 );
