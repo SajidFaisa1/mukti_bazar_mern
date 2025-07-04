@@ -1,0 +1,38 @@
+@font-face {
+  font-family: 'PrimaryFont'; /* Define the font family */
+  src: url('../font/primary.ttf') format('woff'); /* Specify the font file */
+}
+
+@font-face {
+  font-family: 'SecondaryFont'; /* Define the font family */
+  font-size: 1.5rem;
+  src: url('../font/secondary.ttf') format('woff'); /* Specify the font file */
+}
+@font-face {
+  font-family: 'BRHendrix'; /* Define the font family */
+  font-size: 1rem;
+  src: url('../font/BRHendrix-Regular-BF6556d1b5096f9.woff') format('woff'); /* Specify the font file */
+}
+
+
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: 'PrimaryFont', sans-serif;
+}
+.secondary-font {
+  font-family: 'SecondaryFont', sans-serif;
+}
+.primary-font {
+  font-family: 'PrimaryFont', sans-serif;
+}
+.br-hendrix {
+  font-family: 'BRHendrix', serif;
+  font-weight: lighter;
+  font-size: 0.9rem;
+}
+.color-primary{
+  color: #388E3C;
+}

@@ -1,0 +1,46 @@
+.home-container {
+  padding: 0rem 0;
+}
+
+.products-section {
+  padding: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.filter-container {
+  margin-bottom: 2rem;
+  text-align: center;
+}
+
+.filter-container h2 {
+  margin-bottom: 1.5rem;
+  color: #388E3C;
+}
+
+.filter-buttons {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.filter-btn {
+  padding: 0.5rem 1.5rem;
+  border: none;
+  border-radius: 20px;
+  background-color: #E8F5E9;
+  color: #388E3C;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.filter-btn:hover {
+  background-color: #388E3C;
+  color: white;
+}
+
+.filter-btn.active {
+  background-color: #388E3C;
+  color: white;
+}

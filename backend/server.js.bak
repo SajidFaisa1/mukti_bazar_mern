@@ -1,0 +1,954 @@
+const express = require('express');
+const cors = require('cors');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+require('dotenv').config();
+
+const app = express();
+
+// Configure CORS
+app.use(cors({
+  origin: 'http://localhost:5173',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+// Body parsing middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Create uploads directory if it doesn't exist
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir);
+}
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, uploadsDir);
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ storage: storage });
+
+// Store users in separate JSON files for persistence
+const vendorsFilePath = path.join(__dirname, 'vendors.json');
+const usersFilePath = path.join(__dirname, 'users.json');
+
+// Create files if they don't exist
+if (!fs.existsSync(vendorsFilePath)) {
+  fs.writeFileSync(vendorsFilePath, '[]', 'utf8');
+  console.log('Created new vendors.json file');
+}
+
+if (!fs.existsSync(usersFilePath)) {
+  fs.writeFileSync(usersFilePath, '[]', 'utf8');
+  console.log('Created new users.json file');
+}
+
+// Admin credentials (in production, use environment variables and proper hashing)
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@example.com';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123'; // In production, use environment variables and proper hashing
+
+// Simple authentication middleware
+const authenticateAdmin = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  
+  if (!authHeader || !authHeader.startsWith('Basic ')) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  
+  const base64Credentials = authHeader.split(' ')[1];
+  const credentials = Buffer.from(base64Credentials, 'base64').toString('utf-8');
+  const [email, password] = credentials.split(':');
+  
+  if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
+    return next();
+  }
+  
+  res.status(401).json({ error: 'Invalid admin credentials' });
+};
+
+// Load existing data
+let vendors = [];
+let users = [];
+try {
+  const vendorData = fs.readFileSync(vendorsFilePath, 'utf8');
+  const userData = fs.readFileSync(usersFilePath, 'utf8');
+  vendors = JSON.parse(vendorData);
+  users = JSON.parse(userData);
+  
+  // Check if admin user exists, if not create one
+  const adminExists = users.some(user => user.role === 'admin');
+  if (!adminExists) {
+    const adminUser = {
+      id: 'admin-1',
+      uid: 'admin-1',
+      email: ADMIN_EMAIL,
+      password: ADMIN_PASSWORD, // In production, this should be hashed
+      name: 'Admin',
+      role: 'admin',
+      isActive: true,
+      emailVerified: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    users.push(adminUser);
+    fs.writeFileSync(usersFilePath, JSON.stringify(users, null, 2));
+    console.log('Created default admin user');
+  }
+  
+  console.log('Loaded vendors:', vendors.length);
+  console.log('Loaded users:', users.length);
+} catch (error) {
+  console.error('Error loading data:', error);
+}
+
+// Function to save vendor to file
+const saveVendor = async (vendorData) => {
+  try {
+    // Read existing vendors
+    let vendors = [];
+    try {
+      const data = await fs.promises.readFile(vendorsFilePath, 'utf8');
+      vendors = JSON.parse(data);
+    } catch (error) {
+      console.log('No existing vendors file, creating new one');
+    }
+
+    // Create or update vendor
+    const vendor = {
+      id: vendorData.uid || vendorData.id || `vendor-${Date.now()}`,
+      uid: vendorData.uid || vendorData.id, // Ensure uid is set from either uid or id
+      name: vendorData.name,
+      email: vendorData.email,
+      password: vendorData.password, // Ensure password is included
+      phone: vendorData.phone,
+      businessName: vendorData.businessName,
+      address: vendorData.address || {},
+      farmSize: vendorData.farmSize,
+      farmType: vendorData.farmType,
+      crops: vendorData.crops || [],
+      farmingLicense: vendorData.farmingLicense || {},
+      kycDocument: vendorData.kycDocument || {},
+      vendorProfileImage: vendorData.vendorProfileImage || {},
+      role: 'vendor',
+      isApproved: vendorData.isApproved || false,
+      emailVerified: vendorData.emailVerified || false,
+      isActive: vendorData.isActive !== undefined ? vendorData.isActive : true,
+      createdAt: vendorData.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      lastLogin: null
+    };
+
+    console.log('Saving vendor:', JSON.stringify(vendor, null, 2));
+    
+    // Add or update vendor in the array
+    const index = vendors.findIndex(v => v.id === vendor.id);
+    if (index >= 0) {
+      vendors[index] = vendor;
+    } else {
+      vendors.push(vendor);
+    }
+    
+    // Debug: Log the data that will be saved
+    console.log('Saving vendors array:', JSON.stringify(vendors, null, 2));
+    
+    // Save to file
+    await fs.promises.writeFile(vendorsFilePath, JSON.stringify(vendors, null, 2));
+    console.log('Vendor saved successfully');
+    
+    // Verify the file was written correctly
+    try {
+      const savedData = await fs.promises.readFile(vendorsFilePath, 'utf8');
+      console.log('Vendors file content after save:', savedData);
+    } catch (error) {
+      console.error('Error reading vendors file after save:', error);
+    }
+    
+    return vendor;
+  } catch (error) {
+    console.error('Error saving vendor:', error);
+    throw error;
+  }
+};
+
+// Function to save client to file
+const saveClient = async (clientData) => {
+  try {
+    let users = [];
+    
+    // Read existing users
+    if (fs.existsSync(usersFilePath)) {
+      const data = await fs.promises.readFile(usersFilePath, 'utf8');
+      users = data ? JSON.parse(data) : [];
+    }
+    
+    // Generate a new ID if not provided and not a Firebase user
+    const id = clientData.id || (clientData.uid ? clientData.uid : Date.now().toString());
+    
+    // Prepare client data with proper defaults
+    const client = {
+      id,
+      name: clientData.name || '',
+      email: clientData.email.toLowerCase(), // Store email in lowercase for case-insensitive matching
+      phone: clientData.phone || '',
+      address: clientData.address || {},
+      role: 'client',
+      isActive: clientData.isActive !== undefined ? clientData.isActive : true,
+      emailVerified: clientData.emailVerified || false,
+      uid: clientData.uid || null, // Store Firebase UID if available
+      createdAt: clientData.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      lastLogin: clientData.lastLogin || null,
+      isApproved: true, // Clients are auto-approved by default
+      profileImage: clientData.profileImage || null
+    };
+    
+    // Check if user already exists by email or UID
+    const existingUserIndex = users.findIndex(u => 
+      u.email.toLowerCase() === client.email.toLowerCase() ||
+      (u.uid && client.uid && u.uid === client.uid)
+    );
+    
+    if (existingUserIndex >= 0) {
+      // Preserve existing data and update with new values
+      const existingUser = users[existingUserIndex];
+      users[existingUserIndex] = { 
+        ...existingUser,
+        name: client.name || existingUser.name,
+        phone: client.phone || existingUser.phone,
+        address: { ...existingUser.address, ...(client.address || {}) },
+        isActive: client.isActive !== undefined ? client.isActive : existingUser.isActive,
+        emailVerified: client.emailVerified !== undefined ? client.emailVerified : existingUser.emailVerified,
+        uid: client.uid || existingUser.uid, // Only update UID if it's being set
+        updatedAt: client.updatedAt,
+        lastLogin: client.lastLogin || existingUser.lastLogin,
+        profileImage: client.profileImage || existingUser.profileImage
+        // Preserve existing values for these fields
+      };
+    } else {
+      // New user
+      users.push(client);
+    }
+    
+    // Save to file
+    await fs.promises.writeFile(usersFilePath, JSON.stringify(users, null, 2));
+    console.log('Client saved to file');
+    return users[existingUserIndex >= 0 ? existingUserIndex : users.length - 1];
+  } catch (error) {
+    console.error('Error saving client:', error);
+    throw error;
+  }
+};
+
+// Vendor Signup endpoint
+app.post('/api/vendor/signup', upload.fields([
+  { name: 'vendorProfileImage', maxCount: 1 },
+  { name: 'kycDocument', maxCount: 1 },
+  { name: 'farmingLicense', maxCount: 1 }
+]), async (req, res) => {
+  console.log('Received vendor signup request. Files:', req.files);
+  try {
+    // Parse vendor data from request
+    console.log('Raw request body:', req.body);
+    const userData = JSON.parse(req.body.userData);
+    console.log('Parsed userData:', userData);
+    console.log('Password in request:', userData.password ? 'Present' : 'Missing');
+    
+    // Read existing vendors and users to check for duplicates
+    const vendors = JSON.parse(await fs.promises.readFile(vendorsFilePath, 'utf8'));
+    const users = JSON.parse(await fs.promises.readFile(usersFilePath, 'utf8'));
+    
+    // Check for duplicate email or phone
+    const emailExists = [...vendors, ...users].some(user => 
+      user.email === userData.email
+    );
+    
+    const phoneExists = [...vendors, ...users].some(user => 
+      user.phone === userData.phone
+    );
+    
+    if (emailExists) {
+      return res.status(400).json({ error: 'Email already in use' });
+    }
+    
+    if (phoneExists) {
+      return res.status(400).json({ error: 'Phone number already in use' });
+    }
+    
+    // Create vendor object with all required fields
+    console.log('Creating vendor with UID:', userData.uid || 'Not provided');
+    const vendorData = {
+      uid: userData.uid, // This is the Firebase UID
+      name: userData.name,
+      email: userData.email,
+      password: userData.password, // Save the password
+      phone: userData.phone,
+      businessName: userData.businessName,
+      address: userData.address || {},
+      farmSize: userData.farmSize,
+      farmType: userData.farmType,
+      crops: userData.crops || [],
+      role: 'vendor',
+      isApproved: false, // Needs admin approval
+      emailVerified: userData.emailVerified || false,
+      isActive: true
+    };
+    
+    // The saveVendor function will handle setting id, timestamps, etc.
+    console.log('Vendor data before save:', JSON.stringify(vendorData, null, 2));
+
+    // Handle file uploads
+    if (req.files?.vendorProfileImage) {
+      vendorData.vendorProfileImage = {
+        filename: req.files.vendorProfileImage[0].filename,
+        path: req.files.vendorProfileImage[0].path
+      };
+    }
+    if (req.files?.kycDocument) {
+      vendorData.kycDocument = {
+        filename: req.files.kycDocument[0].filename,
+        path: req.files.kycDocument[0].path
+      };
+    }
+    if (req.files?.farmingLicense) {
+      vendorData.farmingLicense = {
+        filename: req.files.farmingLicense[0].filename,
+        path: req.files.farmingLicense[0].path
+      };
+    }
+    
+    // Save vendor data
+    await saveVendor(vendorData);
+    
+    res.status(201).json({ 
+      message: 'Vendor registered successfully. Waiting for admin approval.' 
+    });
+  } catch (error) {
+    console.error('Error in vendor signup:', error);
+    res.status(500).json({ error: error.message || 'Failed to create vendor account' });
+  }
+});
+
+// Client Signup endpoint
+app.post('/api/client/signup', async (req, res) => {
+  try {
+    const clientData = req.body;
+    const client = await saveClient(clientData);
+    console.log('New client added:', client);
+    res.status(201).json(client);
+  } catch (error) {
+    console.error('Error in client signup:', error);
+    res.status(500).json({ error: 'Failed to create client account' });
+  }
+});
+
+// Mock responses for agriculture questions
+const mockResponses = [
+  'ধান চাষের জন্য সবচেয়ে উপযুক্ত সময় হল বর্ষা মৌসুম। মাটি প্রস্তুতি থেকে শুরু করে বীজ বপন, সার প্রয়োগ সবই সঠিক সময়ে করতে হবে।',
+  'সবজি চাষে জৈব সার ব্যবহার করলে ফসলের গুণগত মান বাড়ে এবং মাটির উর্বরতা বজায় থাকে।',
+  'ফসলের রোগ প্রতিরোধে নিয়মিত পর্যবেক্ষণ এবং সময়মত ব্যবস্থা নেওয়া জরুরি।',
+  'আধুনিক কৃষি পদ্ধতি অনুসরণ করে ফসলের উৎপাদন বাড়ানো সম্ভব।',
+  'জলবায়ু পরিবর্তনের প্রভাব মোকাবেলায় খরা সহনশীল ফসলের জাত বেছে নিন।'
+];
+
+
+
+app.post('/api/chat', async (req, res) => {
+  try {
+    console.log('Received request:', req.body);
+    
+    // Validate request body
+    if (!req.body || !Array.isArray(req.body.messages)) {
+      return res.status(400).json({ error: 'Invalid request body. Messages array is required.' });
+    }
+
+    const { messages } = req.body;
+    const userMessage = messages[messages.length - 1].content;
+    
+    // Get a random mock response
+    const responseText = mockResponses[Math.floor(Math.random() * mockResponses.length)];
+    console.log('Response:', responseText);
+
+    res.json({
+      success: true,
+      response: responseText
+    });
+  } catch (error) {
+    console.error('Claude API Error:', error);
+    res.status(500).json({ 
+      error: 'Failed to get response from AI',
+      details: error.message
+    });
+  }
+});
+
+
+// Add error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Middleware error:', err);
+  res.status(500).json({
+    error: 'Internal server error',
+    details: err.message
+  });
+});
+
+const PORT = process.env.PORT || 5005;
+// Serve uploaded files
+app.use(express.json());
+
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Vendor management routes
+app.post('/api/signup', upload.fields([
+  { name: 'vendorProfileImage', maxCount: 1 },
+  { name: 'kycDocument', maxCount: 1 },
+  { name: 'farmingLicense', maxCount: 1 }
+]), async (req, res) => {
+  try {
+    console.log('Signup request body:', req.body);
+    console.log('Signup files:', req.files);
+
+    let userData;
+    try {
+      userData = JSON.parse(req.body.userData);
+      console.log('Parsed user data:', userData);
+    } catch (error) {
+      console.error('Error parsing userData:', error);
+      return res.status(400).json({ error: 'Invalid user data format' });
+    }
+
+    const files = req.files || {};
+
+    // Add file paths to user data
+    if (files.vendorProfileImage) {
+      userData.vendorProfileImage = `/uploads/${files.vendorProfileImage[0].filename}`;
+    }
+    if (req.files?.kycDocument) {
+      vendorData.kycDocument = {
+        filename: req.files.kycDocument[0].filename,
+        path: req.files.kycDocument[0].path
+      };
+    }
+    if (req.files?.farmingLicense) {
+      vendorData.farmingLicense = {
+        filename: req.files.farmingLicense[0].filename,
+        path: req.files.farmingLicense[0].path
+      };
+    }
+
+    const vendor = await saveVendor(vendorData);
+    console.log('New vendor added:', vendor);
+    res.status(201).json(vendor);
+  } catch (error) {
+    console.error('Error in vendor signup:', error);
+    res.status(500).json({ error: 'Failed to create vendor account' });
+  }
+});
+
+// Client Signup endpoint
+app.post('/api/client/signup', async (req, res) => {
+  try {
+    const clientData = req.body;
+    const client = await saveClient(clientData);
+    console.log('New client added:', client);
+    res.status(201).json(client);
+  } catch (error) {
+    console.error('Error in client signup:', error);
+    res.status(500).json({ error: 'Failed to create client account' });
+  }
+});
+
+// Get all users (clients only)
+app.get('/api/users', (req, res) => {
+  res.json(users);
+});
+
+// Admin login endpoint
+app.post('/api/admin/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+    
+    if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
+      // In a real app, generate a JWT token here
+      return res.json({
+        success: true,
+        user: {
+          id: 'admin-1',
+          email: ADMIN_EMAIL,
+          name: 'Admin',
+          role: 'admin',
+          isAdmin: true,
+          emailVerified: true
+        },
+        token: 'dummy-jwt-token' // In production, generate a real JWT
+      });
+    }
+    
+    res.status(401).json({ error: 'Invalid admin credentials' });
+  } catch (error) {
+    console.error('Admin login error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Protected admin routes
+app.use('/api/admin/*', authenticateAdmin);
+
+// Admin Panel - Get all vendors (pending and approved)
+app.get('/api/admin/vendors', (req, res) => {
+  res.json(vendors);
+});
+
+// Get pending vendors
+app.get('/api/vendors/pending', async (req, res) => {
+  try {
+    const vendors = JSON.parse(await fs.promises.readFile(vendorsFilePath, 'utf8'));
+    const pendingVendors = vendors.filter(vendor => !vendor.isApproved);
+    console.log('Pending vendors:', pendingVendors);
+    res.json(pendingVendors);
+  } catch (error) {
+    console.error('Error getting pending vendors:', error);
+    res.status(500).json({ error: 'Failed to get pending vendors' });
+  }
+});
+
+// Approve vendor
+app.post('/api/vendors/approve/:id', async (req, res) => {
+  try {
+    const vendors = JSON.parse(await fs.promises.readFile(vendorsFilePath, 'utf8'));
+    const vendorIndex = vendors.findIndex(v => v.id === req.params.id);
+    
+    if (vendorIndex === -1) {
+      return res.status(404).json({ error: 'Vendor not found' });
+    }
+    
+    vendors[vendorIndex].isApproved = true;
+    await fs.promises.writeFile(vendorsFilePath, JSON.stringify(vendors, null, 2));
+    
+    res.json(vendors[vendorIndex]);
+  } catch (error) {
+    console.error('Error approving vendor:', error);
+    res.status(500).json({ error: 'Failed to approve vendor' });
+  }
+});
+
+// Get user by UID
+app.get('/api/users/:uid', async (req, res) => {
+  try {
+    const { uid } = req.params;
+    
+    // Check in users (clients)
+    const users = JSON.parse(await fs.promises.readFile(usersFilePath, 'utf8'));
+    let user = users.find(u => u.uid === uid);
+    
+    if (user) {
+      // Don't send sensitive data
+      const { password, ...userData } = user;
+      return res.json(userData);
+    }
+    
+    // If not found in users, check in vendors
+    const vendors = JSON.parse(await fs.promises.readFile(vendorsFilePath, 'utf8'));
+    user = vendors.find(v => v.uid === uid);
+    
+    if (user) {
+      // Don't send sensitive data
+      const { password, ...userData } = user;
+      return res.json(userData);
+    }
+    
+    return res.status(404).json({ error: 'User not found' });
+  } catch (error) {
+    console.error('Error fetching user:', error);
+    res.status(500).json({ error: 'Failed to fetch user data' });
+  }
+});
+
+// Update user profile (including email verification status)
+app.put('/api/users/:uid', async (req, res) => {
+  try {
+    const { uid } = req.params;
+    const updates = req.body;
+    
+    // Check in users (clients)
+    const users = JSON.parse(await fs.promises.readFile(usersFilePath, 'utf8'));
+    const userIndex = users.findIndex(u => u.uid === uid);
+    
+    if (userIndex !== -1) {
+      // Update user data
+      users[userIndex] = { ...users[userIndex], ...updates, updatedAt: new Date().toISOString() };
+      await fs.promises.writeFile(usersFilePath, JSON.stringify(users, null, 2));
+      
+      // Don't send sensitive data
+      const { password, ...userData } = users[userIndex];
+      return res.json(userData);
+    }
+    
+    // If not found in users, check in vendors
+    const vendors = JSON.parse(await fs.promises.readFile(vendorsFilePath, 'utf8'));
+    const vendorIndex = vendors.findIndex(v => v.uid === uid);
+    
+    if (vendorIndex !== -1) {
+      // Update vendor data
+      vendors[vendorIndex] = { ...vendors[vendorIndex], ...updates, updatedAt: new Date().toISOString() };
+      await fs.promises.writeFile(vendorsFilePath, JSON.stringify(vendors, null, 2));
+      
+      // Don't send sensitive data
+      const { password, ...vendorData } = vendors[vendorIndex];
+      return res.json(vendorData);
+    }
+    
+    return res.status(404).json({ error: 'User not found' });
+  } catch (error) {
+    console.error('Error updating user:', error);
+    res.status(500).json({ error: 'Failed to update user data' });
+  }
+});
+
+// Import and use the login endpoint from the separate file
+const { loginEndpoint } = require('./login-endpoint');
+app.post('/api/login', loginEndpoint);
+
+// Client signup with Firebase
+app.post('/api/client/signup', async (req, res) => {
+  try {
+    const { email, password, name, phone, uid, emailVerified, address } = req.body;
+    
+    // Basic validation
+    if (!email || !name) {
+      return res.status(400).json({ error: 'Email and name are required' });
+    }
+    
+    // Initialize users array if file doesn't exist
+    let users = [];
+    if (fs.existsSync(usersFilePath)) {
+      const data = await fs.promises.readFile(usersFilePath, 'utf8');
+      users = data ? JSON.parse(data) : [];
+    }
+    
+    // Check if user already exists
+    const existingUser = users.find(u => 
+      u.email && u.email.toLowerCase() === email.toLowerCase() || 
+      (uid && u.uid === uid)
+    );
+    
+    if (existingUser) {
+      // If user exists but is not verified, update their verification status
+      if (existingUser.uid === uid && emailVerified) {
+        existingUser.emailVerified = true;
+        existingUser.updatedAt = new Date().toISOString();
+        await fs.promises.writeFile(usersFilePath, JSON.stringify(users, null, 2));
+        
+        // Don't send password back to client
+        const { password: _, ...userData } = existingUser;
+        return res.status(200).json({
+          message: 'Email verification updated',
+          user: userData
+        });
+      }
+      
+      return res.status(409).json({ 
+        error: 'User already exists',
+        code: 'USER_EXISTS',
+        email: existingUser.email
+      });
+    }
+    
+    // Create new user with all necessary fields
+    const now = new Date().toISOString();
+    const newUser = {
+      id: uid || `user-${Date.now()}`,
+      email: email.toLowerCase().trim(),
+      name: name.trim(),
+      phone: (phone || '').trim(),
+      address: address || {},
+      role: 'client',
+      isApproved: true,
+      emailVerified: Boolean(emailVerified),
+      uid: uid || null,
+      createdAt: now,
+      updatedAt: now,
+      lastLogin: null,
+      isActive: true,
+      profileImage: null  // Initialize profile image as null
+    };
+    
+    console.log('Creating new user with data:', JSON.stringify(newUser, null, 2));
+      
+    // Add password only if it exists (for non-Firebase users)
+    if (password) {
+      newUser.password = password;
+    }
+    
+    console.log('Creating new user:', JSON.stringify(newUser, null, 2));
+    
+    // Save to database
+    users.push(newUser);
+    await fs.promises.writeFile(usersFilePath, JSON.stringify(users, null, 2));
+    console.log('User saved successfully');
+    
+    // Don't send sensitive data back
+    const { password: _, ...userData } = newUser;
+    
+    res.status(201).json({
+      message: 'User created successfully',
+      user: userData
+    });
+    
+  } catch (error) {
+    console.error('Signup error:', error);
+    res.status(500).json({ 
+      error: 'An error occurred during signup',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// Handle email verification callback from Firebase
+app.get('/api/verify-email', async (req, res) => {
+  try {
+    const { uid, email } = req.query;
+    
+    if (!uid && !email) {
+      return res.status(400).send('Missing required parameters');
+    }
+    
+    console.log(`Email verification callback received for UID: ${uid || 'N/A'}, Email: ${email || 'N/A'}`);
+    
+    // Check in users (clients)
+    const users = JSON.parse(await fs.promises.readFile(usersFilePath, 'utf8'));
+    let userIndex = -1;
+    
+    if (uid) {
+      userIndex = users.findIndex(u => u.uid === uid);
+    } 
+    
+    if (userIndex === -1 && email) {
+      // If not found by UID, try finding by email
+      const normalizedEmail = email.toLowerCase().trim();
+      userIndex = users.findIndex(u => 
+        u.email && u.email.toLowerCase().trim() === normalizedEmail
+      );
+    }
+    
+    if (userIndex !== -1) {
+      const user = users[userIndex];
+      console.log(`Found user at index ${userIndex}, updating email verification status`);
+      
+      // Update user's email verification status
+      user.emailVerified = true;
+      user.updatedAt = new Date().toISOString();
+      
+      // If UID was provided in the callback but not in the user record, update it
+      if (uid && !user.uid) {
+        user.uid = uid;
+        console.log(`Added UID ${uid} to user record`);
+      }
+      
+      try {
+        await fs.promises.writeFile(usersFilePath, JSON.stringify(users, null, 2));
+        console.log('Successfully updated users.json with verified email status');
+        
+        // Redirect to login page with success message
+        return res.send(`
+          <html>
+            <head>
+              <title>Email Verified</title>
+              <style>
+                body { 
+                  font-family: Arial, sans-serif; 
+                  text-align: center; 
+                  padding: 50px; 
+                  background-color: #f5f5f5;
+                }
+                .success-message { 
+                  background: white; 
+                  max-width: 500px; 
+                  margin: 0 auto; 
+                  padding: 30px; 
+                  border-radius: 10px; 
+                  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                }
+                .btn {
+                  display: inline-block;
+                  margin-top: 20px;
+                  padding: 10px 20px;
+                  background-color: #4CAF50;
+                  color: white;
+                  text-decoration: none;
+                  border-radius: 5px;
+                }
+                .btn:hover {
+                  background-color: #45a049;
+                }
+              </style>
+            </head>
+            <body>
+              <div class="success-message">
+                <h2>🎉 Email Verified Successfully!</h2>
+                <p>Your email has been verified. You can now log in to your account.</p>
+                <a href="/login" class="btn">Go to Login</a>
+              </div>
+            </body>
+          </html>
+        `);
+      } catch (writeError) {
+        console.error('Failed to update users file:', writeError);
+        return res.status(500).send('Failed to update verification status');
+      }
+    }
+    
+    // If we get here, the user wasn't found
+    console.error('User not found for email verification');
+    return res.status(404).send('User not found');
+    
+  } catch (error) {
+    console.error('Email verification error:', error);
+    return res.status(500).send('An error occurred during email verification');
+  }
+});
+
+// Update user profile (including email verification status)
+app.put('/api/users/verify-email', async (req, res) => {
+  try {
+    const { uid, email, emailVerified } = req.body;
+    
+    if (!uid && !email) {
+      return res.status(400).json({ 
+        error: 'Either uid or email is required',
+        success: false
+      });
+    }
+    
+    console.log(`Updating email verification status for UID: ${uid || 'N/A'}, Email: ${email || 'N/A'}, Status: ${emailVerified}`);
+    
+    // Check in users (clients)
+    const users = JSON.parse(await fs.promises.readFile(usersFilePath, 'utf8'));
+    let userIndex = -1;
+    
+    // First try to find by UID if provided
+    if (uid) {
+      userIndex = users.findIndex(u => u.uid === uid);
+      console.log(`Search by UID ${uid}: ${userIndex !== -1 ? 'Found' : 'Not found'}`);
+    } 
+    
+    // If not found by UID, try by email
+    if (userIndex === -1 && email) {
+      const normalizedEmail = email.toLowerCase().trim();
+      userIndex = users.findIndex(u => 
+        u.email && u.email.toLowerCase().trim() === normalizedEmail
+      );
+      console.log(`Search by email ${email}: ${userIndex !== -1 ? 'Found' : 'Not found'}`);
+    }
+    
+    if (userIndex !== -1) {
+      const user = users[userIndex];
+      console.log(`Found user at index ${userIndex}, current emailVerified: ${user.emailVerified}`);
+      
+      // Update user's email verification status
+      const previousStatus = user.emailVerified;
+      user.emailVerified = emailVerified !== undefined ? emailVerified : true;
+      user.updatedAt = new Date().toISOString();
+      
+      // If UID was provided in the request but not in the user record, update it
+      if (uid && !user.uid) {
+        user.uid = uid;
+        console.log(`Added UID ${uid} to user record`);
+      }
+      
+      console.log(`Updated email verification status from ${previousStatus} to ${user.emailVerified}`);
+      
+      try {
+        // Save the updated users array
+        await fs.promises.writeFile(usersFilePath, JSON.stringify(users, null, 2));
+        console.log('Successfully updated users.json');
+        
+        // Read back to verify
+        const updatedUsers = JSON.parse(await fs.promises.readFile(usersFilePath, 'utf8'));
+        const updatedUser = updatedUsers[userIndex];
+        
+        if (!updatedUser) {
+          console.error('Failed to find updated user after save');
+          return res.status(500).json({
+            success: false,
+            error: 'Failed to verify update',
+            updated: false
+          });
+        }
+        
+        console.log('Verification status after save:', {
+          id: updatedUser.id,
+          email: updatedUser.email,
+          emailVerified: updatedUser.emailVerified,
+          updatedAt: updatedUser.updatedAt
+        });
+        
+        // Don't send sensitive data
+        const { password, ...userData } = updatedUser;
+        
+        return res.json({ 
+          success: true,
+          message: 'Email verification status updated successfully',
+          user: userData,
+          updated: true
+        });
+        
+      } catch (writeError) {
+        console.error('Failed to update users file:', writeError);
+        return res.status(500).json({ 
+          success: false,
+          error: 'Failed to update user verification status',
+          details: process.env.NODE_ENV === 'development' ? writeError.message : undefined,
+          updated: false
+        });
+      }
+    }
+    
+    console.log('User not found in users.json, checking vendors...');
+    
+    // If not found in users, check in vendors
+    const vendors = JSON.parse(await fs.promises.readFile(vendorsFilePath, 'utf8'));
+    const vendorIndex = vendors.findIndex(v => v.uid === uid);
+    
+    if (vendorIndex !== -1) {
+      console.log(`Found vendor at index ${vendorIndex}, updating email verification status`);
+      
+      // Update vendor's email verification status
+      vendors[vendorIndex].emailVerified = true;
+      vendors[vendorIndex].updatedAt = new Date().toISOString();
+      
+      await fs.promises.writeFile(vendorsFilePath, JSON.stringify(vendors, null, 2));
+      console.log('Updated vendors.json with verified email status');
+      
+      // Don't send sensitive data
+      const { password: vendorPassword, ...vendorData } = vendors[vendorIndex];
+      console.log('Returning vendor data:', JSON.stringify(vendorData, null, 2));
+      
+      return res.json({ 
+        message: 'Email verified successfully',
+        user: vendorData 
+      });
+    }
+    
+    return res.status(404).json({ error: 'User not found' });
+  } catch (error) {
+    console.error('Email verification error:', error);
+    res.status(500).json({ error: 'Failed to verify email' });
+  }
+});
+
+app.listen(PORT, () => {
+console.log(`Server running on port ${PORT}`);
+});

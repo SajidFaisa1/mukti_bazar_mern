@@ -1,0 +1,477 @@
+/* Modern Login Form Styles */
+.modern-login-container {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #fbbf24 0%, #a3e635 50%, #22c55e 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.modern-login-card {
+  width: 100%;
+  max-width: 80rem;
+  background: white;
+  border-radius: 1.5rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+
+.modern-login-content {
+  display: flex;
+  height: 720px; /* Changed from min-height to fixed height */
+}
+
+/* Left Side - Image and Welcome Text */
+.modern-login-left {
+  flex: 1;
+  height: 720px; /* Fixed height to prevent image scaling */
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.5)),
+    url("../assets/4.jpg");
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 3rem;
+  color: white;
+  position: relative;
+}
+
+.modern-login-overlay {
+  position: relative;
+  z-index: 10;
+}
+
+.modern-login-title {
+  font-size: 4rem;
+  font-weight: bold;
+  margin-bottom: 1.5rem;
+  line-height: 1.1;
+}
+
+.modern-login-subtitle {
+  font-size: 1.125rem;
+  color: rgba(255, 255, 255, 0.8);
+  line-height: 1.6;
+  max-width: 28rem;
+}
+
+/* Right Side - Login Form */
+.modern-login-right {
+  flex: 1;
+  padding: 3rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.modern-login-form-container {
+  max-width: 24rem;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.modern-login-heading {
+  font-size: 1.875rem;
+  font-weight: bold;
+  color: #111827;
+  margin-bottom: 0.5rem;
+}
+
+.modern-login-description {
+  color: #6b7280;
+  margin-bottom: 2rem;
+  line-height: 1.5;
+}
+
+.modern-login-link {
+  color: #2563eb;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.modern-login-link:hover {
+  color: #1d4ed8;
+  text-decoration: underline;
+}
+
+/* Loading State */
+.modern-auth-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  color: white;
+}
+
+.modern-spinner-large {
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 0.25rem solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 1rem;
+}
+
+/* Alert Styles */
+.modern-alert {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  margin-bottom: 1.5rem;
+  font-size: 0.875rem;
+}
+
+.modern-alert-error {
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+}
+
+.modern-alert-success {
+  background-color: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #15803d;
+}
+
+.modern-alert-icon {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+}
+
+/* Form Styles */
+.modern-login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.modern-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.modern-form-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #374151;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.modern-form-input {
+  border: none;
+  border-bottom: 2px solid #d1d5db;
+  background: transparent;
+  padding: 0.75rem 0;
+  font-size: 1rem;
+  transition: border-color 0.2s;
+  outline: none;
+}
+
+.modern-form-input:focus {
+  border-bottom-color: #111827;
+}
+
+.modern-form-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Radio Group */
+.modern-radio-group {
+  display: flex;
+  gap: 1.5rem;
+}
+
+.modern-radio-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.modern-radio-option input[type="radio"] {
+  width: 1rem;
+  height: 1rem;
+  accent-color: #111827;
+}
+
+.modern-radio-text {
+  font-weight: 500;
+  color: #374151;
+}
+
+/* Password Field */
+.modern-form-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modern-forgot-password {
+  background: none;
+  border: none;
+  color: #2563eb;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+}
+
+.modern-forgot-password:hover {
+  color: #1d4ed8;
+  text-decoration: underline;
+}
+
+.modern-password-container {
+  position: relative;
+}
+
+.modern-password-toggle {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 0.25rem;
+}
+
+.modern-password-toggle:hover {
+  color: #374151;
+}
+
+/* Login Button */
+.modern-login-button {
+  width: 100%;
+  background-color: #ef4444;
+  color: white;
+  font-weight: bold;
+  padding: 1rem 2rem;
+  border-radius: 9999px;
+  font-size: 1.125rem;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.modern-login-button:hover {
+  background-color: #dc2626;
+  transform: scale(1.02);
+}
+
+.modern-login-button:active {
+  transform: scale(0.98);
+}
+
+.modern-login-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.modern-spinner {
+  width: 1.25rem;
+  height: 1.25rem;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Social Login - Fixed height container */
+.modern-social-section {
+  margin-top: 2rem;
+  min-height: 180px; /* Increased from 160px to accommodate divider, buttons, and footer text */
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+.modern-social-section.hidden {
+  visibility: hidden; /* Hide content but maintain space */
+}
+
+/* Divider */
+.modern-divider {
+  display: flex;
+  align-items: center;
+  margin: 1.5rem 0;
+  color: #6b7280;
+  font-size: 0.875rem;
+}
+
+.modern-divider::before,
+.modern-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background-color: #e5e7eb;
+  margin: 0 0.75rem;
+}
+
+.modern-divider-text {
+  font-weight: 500;
+  color: #9ca3af;
+}
+
+.modern-social-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.modern-social-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 0.875rem 1.5rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border: 1px solid;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.modern-social-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.modern-social-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.modern-social-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.modern-social-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+}
+
+/* Google Button */
+.modern-social-google {
+  background: white;
+  border-color: #dadce0;
+  color: #3c4043;
+}
+
+.modern-social-google:hover:not(:disabled) {
+  background: #f8f9fa;
+  border-color: #dadce0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.modern-social-google .modern-social-icon {
+  color: #4285f4;
+}
+
+/* Facebook Button */
+.modern-social-facebook {
+  background: #1877f2;
+  border-color: #1877f2;
+  color: white;
+}
+
+.modern-social-facebook:hover:not(:disabled) {
+  background: #166fe5;
+  border-color: #166fe5;
+}
+
+.modern-social-facebook .modern-social-icon {
+  color: white;
+}
+
+/* Disabled Facebook Button */
+.modern-social-facebook:disabled {
+  background: #e5e7eb;
+  border-color: #e5e7eb;
+  color: #9ca3af;
+}
+
+.modern-social-facebook:disabled .modern-social-icon {
+  color: #9ca3af;
+}
+
+.modern-social-footer {
+  text-align: center;
+  font-size: 0.75rem;
+  color: #9ca3af;
+  font-style: italic;
+  margin-top: 0.5rem;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .modern-login-content {
+    flex-direction: column;
+    height: auto; /* Allow natural height on mobile */
+  }
+
+  .modern-login-left {
+    min-height: 200px;
+    height: auto; /* Allow natural height on mobile */
+    padding: 2rem;
+  }
+
+  .modern-login-title {
+    font-size: 2.5rem;
+  }
+
+  .modern-login-right {
+    padding: 2rem;
+  }
+
+  .modern-radio-group {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  /* On mobile, don't reserve space for social buttons */
+  .modern-social-section {
+    min-height: auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .modern-login-container {
+    padding: 1rem;
+  }
+
+  .modern-login-left {
+    padding: 1.5rem;
+  }
+
+  .modern-login-right {
+    padding: 1.5rem;
+  }
+}
