@@ -224,6 +224,7 @@
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 0.75rem;
   margin-bottom: 1rem;
+  align-items: normal;
 }
 
 .meta-item {
@@ -249,6 +250,7 @@
 
 .product-images {
   display: flex;
+  width: 20%;
   gap: 0.5rem;
   flex-shrink: 0;
   align-items: center;

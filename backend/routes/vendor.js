@@ -44,6 +44,18 @@ router.post('/signup', async (req, res) => {
   }
 });
 
+// GET /api/vendors/store/:storeId – fetch vendor basic info
+router.get('/store/:storeId', async (req, res) => {
+  try {
+    const vendor = await Vendor.findOne({ storeId: req.params.storeId }).select('-password');
+    if (!vendor) return res.status(404).json({ error: 'Vendor not found' });
+    res.json(vendor);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // GET /api/vendors/pending – list vendors awaiting approval
 router.get('/pending', async (_req, res) => {
   try {

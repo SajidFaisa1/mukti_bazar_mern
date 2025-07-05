@@ -18,6 +18,8 @@ const vendorSchema = new mongoose.Schema(
     profileCompleted: { type: Boolean, default: false },
     emailVerified: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true },
+    featuredCredit: { type: Number, default: 3 },
+
   },
   { timestamps: true }
 );

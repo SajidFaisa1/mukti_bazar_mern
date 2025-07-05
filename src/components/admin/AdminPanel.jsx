@@ -100,19 +100,19 @@ const AdminPanel = () => {
       ) : (
         <div className="products-list">
           {products.map(product => (
-            <div key={product.id} className="product-card">
+            <div key={product._id} className="product-card">
               <div className="product-header">
                 <h3 className="product-title">{product.name}</h3>
                 <div className="product-actions">
                   <button
                     className="approve-btn"
-                    onClick={() => handleProductApprove(product.id)}
+                    onClick={() => handleProductApprove(product._id)}
                   >
                     Approve
                   </button>
                   <button
                     className="decline-btn"
-                    onClick={() => handleProductDecline(product.id)}
+                    onClick={() => handleProductDecline(product._id)}
                   >
                     Decline
                   </button>
@@ -126,14 +126,37 @@ const AdminPanel = () => {
                       <strong>Vendor:</strong> {product.businessName}
                     </span>
                     <span className="meta-item">
+                      <strong>Store ID:</strong> {product.storeId}
+                    </span>
+                    <span className="meta-item">
                       <strong>Price:</strong> ${product.unitPrice}
                     </span>
+                    <span className="meta-item">
+                      <strong>Unit Type:</strong> {product.unitType}
+                    </span>
+                    <span className="meta-item">
+                      <strong>Min Order Qty:</strong> {product.minOrderQty}
+                    </span>
+                    
                     <span className="meta-item">
                       <strong>Stock:</strong> {product.totalQty} units
                     </span>
                     <span className="meta-item">
                       <strong>Category:</strong> {product.category}
                     </span>
+                    <span className="meta-item">
+                      <strong>Delivery Option:</strong> {product.deliveryOption}
+                    </span>
+                  
+                    <span className="meta-item">
+                      <strong>Created At:</strong> {product.createdAt}
+                    </span>
+                    <span className="meta-item">
+                      <strong>Updated At:</strong> {product.updatedAt}
+                    </span>
+                    
+                   
+                    
                   </div>
                   {product.description && (
                     <p className="product-description">{product.description}</p>

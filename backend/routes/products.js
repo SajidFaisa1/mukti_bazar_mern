@@ -162,4 +162,32 @@ router.post('/decline/:id', async (req, res) => {
   }
 });
 
+// PATCH /api/products/feature/:id – use one vendor credit & mark product featured
+router.patch('/feature/:id', async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id);
+    if (!product) return res.status(404).json({ error: 'Product not found' });
+
+    // Get vendor via storeId
+    const Vendor = require('../models/Vendor');
+    const vendor = await Vendor.findOne({ storeId: product.storeId });
+    if (!vendor) return res.status(404).json({ error: 'Vendor not found' });
+
+    const currentCredit = typeof vendor.featuredCredit === 'number' ? vendor.featuredCredit : 0;
+    if (currentCredit <= 0) {
+      return res.status(400).json({ error: 'No feature credits left' });
+    }
+
+    vendor.featuredCredit = currentCredit - 1;
+    await vendor.save();
+    await Product.updateOne({ _id: product._id }, { $set: { isFeatured: true } });
+    const updatedProduct = { ...product.toObject(), isFeatured: true };
+
+    res.json({ success: true, product: updatedProduct, featuredCredit: vendor.featuredCredit });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 module.exports = router;

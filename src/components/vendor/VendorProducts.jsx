@@ -16,16 +16,33 @@ import {
   CheckCircle,
   Trash2,
   ImageIcon,
+  User,
+  Star,
+  Zap,
+  AlertCircle,
 } from "lucide-react"
 import "./VendorProducts.css"
 
 const VendorProducts = () => {
-  const { user } = useAuth()
+ 
   const apiBase = "http://localhost:5005/api"
   const [products, setProducts] = useState([])
   const [editingProduct, setEditingProduct] = useState(null)
+  const [creditLeft, setCreditLeft] = useState(0)
+  const [showFeatureModal, setShowFeatureModal] = useState(false)
+  const [selectedProduct, setSelectedProduct] = useState(null)
+  const { user } = useAuth()
 
   // Fetch products for this vendor
+  // Fetch vendor credit once
+  useEffect(() => {
+    if (!user?.storeId) return
+    fetch(`${apiBase}/vendors/store/${user.storeId}`)
+      .then(res => res.json())
+      .then(v => setCreditLeft(v.featuredCredit ?? 0))
+      .catch(console.error)
+  }, [user])
+
   useEffect(() => {
     if (!user?.storeId) return
     fetch(`${apiBase}/products/vendor/${user.storeId}`)
@@ -154,6 +171,23 @@ const VendorProducts = () => {
     }
   }
 
+  const featureProduct = async () => {
+    if (!selectedProduct) return;
+    try {
+      const id = selectedProduct._id || selectedProduct.id;
+      const res = await fetch(`${apiBase}/products/feature/${id}`, { method: 'PATCH' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to feature product');
+      // update product list
+      setProducts(prev => prev.map(p => (p._id === data.product._id ? data.product : p)));
+      setCreditLeft(data.featuredCredit);
+      setShowFeatureModal(false);
+    } catch (err) {
+      alert(err.message);
+      console.error(err);
+    }
+  };
+
   const getCategoryColor = (category) => {
     const colors = {
       Seeds: "category-seeds",
@@ -175,6 +209,10 @@ const VendorProducts = () => {
             <p className="page-description">Manage and showcase your agricultural products</p>
           </div>
           <div className="header-stats">
+            <div className="stat-item">
+              <span className="stat-number">{creditLeft}</span>
+              <span className="stat-label">Feature Credits</span>
+            </div>
             <div className="stat-item">
               <span className="stat-number">{products.length}</span>
               <span className="stat-label">Products</span>
@@ -213,6 +251,11 @@ const VendorProducts = () => {
                     <button className="overlay-btn delete" onClick={() => deleteProduct(product.id || product._id)}>
                       <Trash2 className="overlay-icon" />
                     </button>
+                    {!product.isFeatured && (
+                      <button className="overlay-btn feature" onClick={() => { setSelectedProduct(product); setShowFeatureModal(true); }}>
+                        <Star className="overlay-icon" />
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -243,6 +286,14 @@ const VendorProducts = () => {
                     <div className="meta-item">
                       <Truck className="meta-icon" />
                       <span>{product.deliveryOption}</span>
+                    </div>
+                    <div className="meta-item">
+                      <User className="meta-icon" />
+                      <span>Admin Approved: {product.isApproved ? "Yes" : "No"}</span>
+                    </div>
+                    <div className="meta-item">
+                      <User className="meta-icon" />
+                      <span>Featured: {product.isFeatured ? "Yes" : "No"}</span>
                     </div>
                   </div>
                 </div>
@@ -594,9 +645,105 @@ const VendorProducts = () => {
             </div>
           </div>
         )}
+     {showFeatureModal && selectedProduct && (
+        <div
+          className="feature-modal-backdrop"
+          onClick={(e) => e.target === e.currentTarget && setShowFeatureModal(false)}
+        >
+          <div className="feature-confirmation-card">
+            <div className="confirmation-header">
+              <div className="header-icon-wrapper">
+                <Star className="feature-icon" />
+              </div>
+              <div className="header-content">
+                <h3 className="confirmation-title">Feature This Product?</h3>
+                <p className="confirmation-subtitle">Boost visibility and reach more customers</p>
+              </div>
+            </div>
+
+            <div className="confirmation-body">
+              <div className="product-preview">
+                <div className="preview-image">
+                  {selectedProduct.images?.[0] ? (
+                    <img
+                      src={selectedProduct.images[0] || "/placeholder.svg"}
+                      alt={selectedProduct.name}
+                      className="product-thumbnail"
+                    />
+                  ) : (
+                    <Package className="thumbnail-placeholder" />
+                  )}
+                </div>
+                <div className="preview-details">
+                  <h4 className="preview-name">{selectedProduct.name}</h4>
+                  <span className="preview-category">{selectedProduct.category}</span>
+                </div>
+              </div>
+
+              <div className="credit-info-card">
+                <div className="credit-cost">
+                  <Zap className="credit-icon" />
+                  <span className="cost-text">
+                    This will use <strong>1 credit</strong>
+                  </span>
+                </div>
+                <div className="credit-balance">
+                  <div className="balance-indicator">
+                    <span className="balance-label">Available Credits</span>
+                    <span className={`balance-count ${creditLeft <= 0 ? "balance-low" : "balance-good"}`}>
+                      {creditLeft}
+                    </span>
+                  </div>
+                  {creditLeft <= 0 && (
+                    <div className="insufficient-credits">
+                      <AlertCircle className="warning-icon" />
+                      <span className="warning-text">Insufficient credits</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="feature-benefits">
+                <h5 className="benefits-title">What you get:</h5>
+                <ul className="benefits-list">
+                  <li className="benefit-item">
+                    <CheckCircle className="benefit-icon" />
+                    <span>Priority placement in search results</span>
+                  </li>
+                  <li className="benefit-item">
+                    <CheckCircle className="benefit-icon" />
+                    <span>Featured badge on your product</span>
+                  </li>
+                  <li className="benefit-item">
+                    <CheckCircle className="benefit-icon" />
+                    <span>Increased visibility for 30 days</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <div className="confirmation-actions">
+              <button type="button" className="action-btn cancel-action" onClick={() => setShowFeatureModal(false)}>
+                <X className="action-icon" />
+                <span>Cancel</span>
+              </button>
+              <button
+                type="button"
+                className={`action-btn confirm-action ${creditLeft <= 0 ? "action-disabled" : ""}`}
+                disabled={creditLeft <= 0}
+                onClick={featureProduct}
+              >
+                <Star className="action-icon" />
+                <span>Feature Product</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       </div>
-    
   )
 }
+
+     
 
 export default VendorProducts
