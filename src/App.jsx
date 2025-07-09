@@ -4,7 +4,8 @@ import Home from './components/Home';
 import Analysis from './components/Analysis';
 import Chat from './components/Chat';
 import { LanguageProvider } from './contexts/LanguageContext';
-import { AuthProvider } from './contexts/VendorAuthContext';
+import { VendorAuthProvider } from './contexts/VendorAuthContext';
+import { ClientAuthProvider } from './contexts/ClientAuthContext';
 import { AdminAuthProvider } from './contexts/AdminAuthContext';
 import { CartProvider } from './contexts/CartContext';
 import Login from './components/auth/Login';
@@ -24,12 +25,12 @@ import AdminLogin from './components/auth/AdminLogin';
 
 function App() {
   return (
-    <AuthProvider>
-      <AdminAuthProvider>
-      <LanguageProvider>
-        <CartProvider>
-          <Router>
-            <div className="app">
+    <ClientAuthProvider>
+    <AdminAuthProvider>
+    <LanguageProvider>
+      <CartProvider>
+        <Router>
+          <div className="app">
               <Navbar />
               <Routes>
                 <Route path="/" element={<Home />} />
@@ -40,23 +41,39 @@ function App() {
                 <Route path="/user" element={<ProtectedRoute element={<UserProfile />} />} />
                 <Route path="/analysis" element={<Analysis />} />
                 <Route path="/chat" element={<Chat />} />
-                <Route path="/login" element={<Login />} />
+                <Route path="/login" element={<VendorAuthProvider><Login /></VendorAuthProvider>} />
                 <Route path="/signup" element={<SignupChoice />} />
                 <Route path="/signup/client" element={<ClientSignupSimple />} />
-                <Route path="/signup/vendor" element={<VendorSignupSimple />} />
+                <Route path="/signup/vendor" element={<VendorAuthProvider><VendorSignupSimple /></VendorAuthProvider>} />
                 <Route path="/admin" element={<AdminProtectedRoute element={<AdminPanel />} />} />
-                <Route path="/vendor/dashboard" element={<ProtectedRoute element={<VendorDashboard />} requiredRole="vendor" />} />
-                <Route path="/vendor/products" element={<ProtectedRoute element={<VendorProducts />} requiredRole="vendor" />} />
-                <Route path="/vendor/profile" element={<ProtectedRoute element={<VendorProfileCompletion />} requiredRole="vendor" />} />
-                <Route path="/vendor/orders" element={<ProtectedRoute element={<h1>Vendor Orders</h1>} requiredRole="vendor" />} />
+                <Route path="/vendor/dashboard" element={
+                  <VendorAuthProvider>
+                    <ProtectedRoute element={<VendorDashboard />} requiredRole="vendor" />
+                  </VendorAuthProvider>
+                } />
+                <Route path="/vendor/products" element={
+                  <VendorAuthProvider>
+                    <ProtectedRoute element={<VendorProducts />} requiredRole="vendor" />
+                  </VendorAuthProvider>
+                } />
+                <Route path="/vendor/profile" element={
+                  <VendorAuthProvider>
+                    <ProtectedRoute element={<VendorProfileCompletion />} requiredRole="vendor" />
+                  </VendorAuthProvider>
+                } />
+                <Route path="/vendor/orders" element={
+                  <VendorAuthProvider>
+                    <ProtectedRoute element={<h1>Vendor Orders</h1>} requiredRole="vendor" />
+                  </VendorAuthProvider>
+                } />
                 <Route path="/admin/login" element={<AdminLogin />} />
               </Routes>
             </div>
           </Router>
         </CartProvider>
       </LanguageProvider>
-          </AdminAuthProvider>
-    </AuthProvider>
+    </AdminAuthProvider>
+    </ClientAuthProvider>
     
   );
 }

@@ -1,4 +1,43 @@
+// ------------------------------
+// Express API MAIN ENTRY (clean)
+// All heavy logic now lives in dedicated routers.
+// The previous monolithic implementation has been archived to legacyServer.js
+// ------------------------------
+require('dotenv').config();
 const express = require('express');
+const cors = require('cors');
+
+// Establish Mongo connection
+require('./config/db');
+
+// Routers
+const vendorRoutes  = require('./routes/vendor');
+const userRoutes    = require('./routes/user');
+const authRoutes    = require('./routes/auth');
+const adminRoutes   = require('./routes/admin');
+const productRoutes = require('./routes/products');
+
+const app = express();
+app.use(express.json({ limit: '10mb' }));
+app.use(cors());
+
+// Mount API routers
+app.use('/api/vendors',  vendorRoutes);
+app.use('/api/clients',  userRoutes);
+app.use('/api/auth',     authRoutes);
+app.use('/api/admin',    adminRoutes);
+app.use('/api/products', productRoutes);
+
+// Deprecated/legacy endpoints quick 410 response
+['/api/vendor/signup', '/api/client/signup'].forEach((p) =>
+  app.all(p, (_, res) => res.status(410).json({ error: 'Deprecated endpoint. Use new routes.' }))
+);
+
+// 404 fallback
+app.use((_, res) => res.status(404).json({ error: 'Route not found' }));
+
+const PORT = process.env.PORT || 5005;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
@@ -6,22 +45,77 @@ const fs = require('fs');
 require('dotenv').config();
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const { randomUUID } = require('crypto');
 require('./config/db'); // Connect to MongoDB
 const Vendor = require('./models/Vendor');
 const User = require('./models/User');
 
+// Routers
+const vendorRoutes = require('./routes/vendor');
+const userRoutes = require('./routes/user');
+const authRoutes = require('./routes/auth');
+const adminRoutes = require('./routes/admin');
+const productRoutes = require('./routes/products'); // <- matches file name
+
 const app = express();
 
-// Configure CORS
+app.use(express.json({ limit: '10mb' }));        // ⬅️ raise as needed
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// CORS must be applied **before** defining any routes so that pre-flight
+// OPTIONS requests are handled correctly for every endpoint.
 app.use(cors({
-  origin: 'http://localhost:5173',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  origin: function (origin, callback) {
+    // Allow requests from localhost (dev) or requests without an Origin header
+    if (!origin || origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')) {
+      return callback(null, true);
+    }
+    return callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// Body parsing middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Handle pre-flight requests quickly
+// Explicit wildcard for Express compatibility
+
+
+
+
+
+// Mount routers
+app.use('/api/vendors', vendorRoutes);
+app.use('/api/clients', userRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/admin', adminRoutes);
+
+// ---------------------------
+// Deprecated legacy JSON endpoints
+// These routes originally relied on JSON file persistence and have been
+// fully superseded by the modular MongoDB-backed routers defined in
+// ./routes/vendor.js and ./routes/user.js.  To prevent any accidental
+// usage we register lightweight handlers that immediately return
+// HTTP 410 Gone.
+// ---------------------------
+['/api/vendor/signup',
+ '/api/client/signup',
+ '/api/vendors/approve/:id',
+ '/api/vendors/pending',
+ '/api/users',
+ '/api/vendors']
+  .forEach((routePath) => {
+    app.all(routePath, (req, res) => {
+      return res.status(410).json({
+        error: 'Deprecated endpoint. Please use the updated API routes.'
+      });
+    });
+  });
+
+// Mount additional router
+app.use('/api/products', productRoutes);
+
+
+
 
 // Create uploads directory if it doesn't exist
 const uploadsDir = path.join(__dirname, 'uploads');
@@ -42,34 +136,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
-// Store users in separate JSON files for persistence
-const vendorsFilePath = path.join(__dirname, 'vendors.json');
-const usersFilePath = path.join(__dirname, 'users.json');
-
-// Create files if they don't exist
-if (!fs.existsSync(vendorsFilePath)) {
-  fs.writeFileSync(vendorsFilePath, '[]', 'utf8');
-  console.log('Created new vendors.json file');
-}
-
-if (!fs.existsSync(usersFilePath)) {
-  fs.writeFileSync(usersFilePath, '[]', 'utf8');
-  console.log('Created new users.json file');
-}
-
-// Load existing data
-let vendors = [];
-let users = [];
-try {
-  const vendorData = fs.readFileSync(vendorsFilePath, 'utf8');
-  const userData = fs.readFileSync(usersFilePath, 'utf8');
-  vendors = JSON.parse(vendorData);
-  users = JSON.parse(userData);
-  console.log('Loaded vendors:', vendors.length);
-  console.log('Loaded users:', users.length);
-} catch (error) {
-  console.error('Error loading data:', error);
-}
+// Legacy JSON persistence fully removed
 
 // Function to save vendor to file
 const saveVendor = async (vendorData) => {
@@ -247,18 +314,20 @@ app.post('/api/vendor/signup', upload.fields([
     // Create vendor object with all required fields
     console.log('Creating vendor with UID:', userData.uid || 'Not provided');
     const vendorData = {
-      uid: userData.uid, // This is the Firebase UID
-      name: userData.name,
+      uid: userData.uid,
+      storeId: randomUUID().slice(0, 8),
+      sellerName: userData.sellerName || userData.name || '',
       email: userData.email,
       password: await bcrypt.hash(userData.password, 10), // Hashed password
       phone: userData.phone,
       businessName: userData.businessName,
       address: userData.address || {},
-      farmSize: userData.farmSize,
-      farmType: userData.farmType,
-      crops: userData.crops || [],
+      shopLogo: userData.shopLogo || {},
+      farmingLicense: userData.farmingLicense || {},
+      kycDocument: userData.kycDocument || {},
       role: 'vendor',
       isApproved: false, // Needs admin approval
+      profileCompleted: false,
       emailVerified: userData.emailVerified || false,
       isActive: true
     };
@@ -441,7 +510,7 @@ app.get('/api/vendors', (req, res) => {
 app.get('/api/vendors/pending', async (req, res) => {
   try {
     const vendors = JSON.parse(await fs.promises.readFile(vendorsFilePath, 'utf8'));
-    const pendingVendors = vendors.filter(vendor => !vendor.isApproved);
+    const pendingVendors = vendors.filter(vendor => !vendor.isApproved && vendor.profileCompleted);
     console.log('Pending vendors:', pendingVendors);
     res.json(pendingVendors);
   } catch (error) {
@@ -471,34 +540,30 @@ app.post('/api/vendors/approve/:id', async (req, res) => {
 });
 
 // Get user by UID
+// Fetch user (client or vendor) by Firebase UID from MongoDB
 app.get('/api/users/:uid', async (req, res) => {
   try {
     const { uid } = req.params;
-    
-    // Check in users (clients)
-    const users = JSON.parse(await fs.promises.readFile(usersFilePath, 'utf8'));
-    let user = users.find(u => u.uid === uid);
-    
-    if (user) {
-      // Don't send sensitive data
-      const { password, ...userData } = user;
-      return res.json(userData);
+    if (!uid) {
+      return res.status(400).json({ error: 'UID is required' });
     }
-    
-    // If not found in users, check in vendors
-    const vendors = JSON.parse(await fs.promises.readFile(vendorsFilePath, 'utf8'));
-    user = vendors.find(v => v.uid === uid);
-    
-    if (user) {
-      // Don't send sensitive data
-      const { password, ...userData } = user;
-      return res.json(userData);
+
+    // Try to find client
+    let user = await User.findOne({ uid }).select('-password -__v');
+
+    // If not a client, try vendor
+    if (!user) {
+      user = await Vendor.findOne({ uid }).select('-password -__v');
     }
-    
-    return res.status(404).json({ error: 'User not found' });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    return res.json(user);
   } catch (error) {
-    console.error('Error fetching user:', error);
-    res.status(500).json({ error: 'Failed to fetch user data' });
+    console.error('Error fetching user from MongoDB:', error);
+    return res.status(500).json({ error: 'Failed to fetch user data' });
   }
 });
 
@@ -543,9 +608,8 @@ app.put('/api/users/:uid', async (req, res) => {
   }
 });
 
-// Import and use the login endpoint from the separate file
-const { loginEndpoint } = require('./login-endpoint');
-app.post('/api/login', loginEndpoint);
+// Legacy login-endpoint removed
+// app.post('/api/login') removed
 
 // Client signup with Firebase
 app.post('/api/client/signup', async (req, res) => {

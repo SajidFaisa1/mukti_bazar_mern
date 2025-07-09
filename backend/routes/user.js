@@ -6,7 +6,7 @@ const router = express.Router();
 // POST /api/clients/signup – minimal client registration
 router.post('/signup', async (req, res) => {
   try {
-    const { firstName, lastName, email, password, confirmPassword, phone } = req.body;
+    const { firstName, lastName, email, password, confirmPassword, phone, uid } = req.body;
     if (!firstName || !lastName || !email || !password || !confirmPassword) {
       return res.status(400).json({ error: 'All fields are required' });
     }
@@ -19,6 +19,7 @@ router.post('/signup', async (req, res) => {
     }
     const hashed = await bcrypt.hash(password, 10);
     const user = await User.create({
+      uid: uid || undefined,
       name: `${firstName} ${lastName}`.trim(),
       email,
       password: hashed,

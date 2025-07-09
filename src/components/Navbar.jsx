@@ -2,9 +2,13 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faShoppingCart, faUser, faSearch, faLanguage, faCaretDown } from '@fortawesome/free-solid-svg-icons';
-import { useAuth } from '../contexts/VendorAuthContext';
+import { useVendorAuth } from '../contexts/VendorAuthContext';
+import { useClientAuth } from '../contexts/ClientAuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useCart } from '../contexts/CartContext';
+import { auth } from '../firebase';
+import { signOut as firebaseSignOut } from 'firebase/auth';
+import { useNavigate } from 'react-router-dom';
 import { translations } from '../translations/translations';
 import './navbar.css';
 import logo from '../assets/logo.png';
@@ -14,7 +18,21 @@ const Navbar = () => {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const profileRef = useRef(null);
 
-  const { user, role, logout } = useAuth();
+    // Grab both auth contexts (either may be undefined if its provider isn't mounted)
+  const vendorAuth = useVendorAuth() || {};
+  const clientAuth = useClientAuth() || {};
+
+  // Consolidate user/role/logout, fallback to localStorage vendorUser
+  let storedVendor = null;
+  try {
+    storedVendor = JSON.parse(sessionStorage.getItem('vendorUser') || localStorage.getItem('vendorUser') || 'null');
+  } catch (_) {}
+
+  const user = vendorAuth.user || clientAuth.user || storedVendor || null;
+  const role = vendorAuth.role || clientAuth.user?.role || storedVendor?.role || null;
+  const logout = vendorAuth.logout || clientAuth.logout || (() => {});
+
+  const navigate = useNavigate();
   const location = useLocation();
   const { language, toggleLanguage } = useLanguage();
   const { cart } = useCart();
@@ -32,10 +50,24 @@ const Navbar = () => {
     toggleLanguage();
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setShowProfileMenu(false);
 
-    logout();
+    // Call available context logout(s)
+    if (vendorAuth.logout) await vendorAuth.logout();
+    if (clientAuth.logout) clientAuth.logout();
+    // Fallback: sign out Firebase user in case vendorAuth provider not mounted
+    try { await firebaseSignOut(auth); } catch (_) {}
+
+    // Clear any cached data (sessionStorage preferred)
+    sessionStorage.removeItem('vendorUser');
+    sessionStorage.removeItem('clientToken');
+    sessionStorage.removeItem('clientUser');
+    localStorage.removeItem('vendorUser');
+    localStorage.removeItem('clientToken');
+    localStorage.removeItem('clientUser');
+
+    navigate('/');
   };
 
   // Close dropdown when clicking outside

@@ -173,17 +173,17 @@ router.patch('/feature/:id', async (req, res) => {
     const vendor = await Vendor.findOne({ storeId: product.storeId });
     if (!vendor) return res.status(404).json({ error: 'Vendor not found' });
 
-    const currentCredit = typeof vendor.featuredCredit === 'number' ? vendor.featuredCredit : 0;
-    if (currentCredit <= 0) {
+    if (vendor.featuredCredit <= 0) {
       return res.status(400).json({ error: 'No feature credits left' });
     }
 
-    vendor.featuredCredit = currentCredit - 1;
-    await vendor.save();
-    await Product.updateOne({ _id: product._id }, { $set: { isFeatured: true } });
-    const updatedProduct = { ...product.toObject(), isFeatured: true };
+    vendor.featuredCredit -= 1;
+    product.isFeatured = true;
 
-    res.json({ success: true, product: updatedProduct, featuredCredit: vendor.featuredCredit });
+    await vendor.save();
+    await product.save();
+
+    res.json({ success: true, product, featuredCredit: vendor.featuredCredit });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });

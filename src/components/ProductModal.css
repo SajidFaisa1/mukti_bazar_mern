@@ -1,7 +1,7 @@
 /* Modal Overlay */
 .modal-overlay {
   position: fixed;
-  top: 80px;
+  top: 40px;
   left: 0;
   right: 0;
   bottom: 0;
@@ -44,7 +44,7 @@
 /* Mukti Logo in Modal */
 .mukti-logo-container {
   position: fixed;
-  bottom: 40px;
+  bottom: 2rem;
   z-index: 1100; /* Higher than modal's z-index */
   max-width: 120px;
   max-height: 80px;
@@ -60,13 +60,11 @@
 }
 
 /* Ensure logo is visible on top of modal overlay */
-.modal-overlay {
-  position: fixed;
-  z-index: 1000;
-}
+
 
 .modal-content {
   position: relative;
+  
   z-index: 1001;
 }
 
@@ -98,6 +96,7 @@
   display: flex;
   flex-direction: column;
   /* Ensure content doesn't get cut off at the top */
+  margin-top: 110px;
   scroll-behavior: smooth;
   -webkit-overflow-scrolling: touch;
 }
@@ -145,6 +144,7 @@
   flex-direction: row;
   padding: 30px;
   position: relative;
+  
   width: 100%;
   gap: 20px;
 }

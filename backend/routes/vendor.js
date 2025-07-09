@@ -56,6 +56,18 @@ router.get('/store/:storeId', async (req, res) => {
   }
 });
 
+// GET /api/vendors/uid/:uid – fetch vendor by Firebase UID
+router.get('/uid/:uid', async (req, res) => {
+  try {
+    const vendor = await Vendor.findOne({ uid: req.params.uid }).select('-password');
+    if (!vendor) return res.status(404).json({ error: 'Vendor not found' });
+    res.json(vendor);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // GET /api/vendors/pending – list vendors awaiting approval
 router.get('/pending', async (_req, res) => {
   try {

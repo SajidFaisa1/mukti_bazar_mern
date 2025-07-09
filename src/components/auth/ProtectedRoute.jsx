@@ -1,9 +1,15 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
-import { useAuth } from '../../contexts/VendorAuthContext';
+import { useVendorAuth } from '../../contexts/VendorAuthContext';
+import { useClientAuth } from '../../contexts/ClientAuthContext';
 
 const ProtectedRoute = ({ element, requiredRole }) => {
-  const { user, role, isApproved, loading } = useAuth();
+  const vendor = useVendorAuth();
+  const client = useClientAuth();
+  const user = vendor.user || client.user || null;
+  const role = vendor.role || client.user?.role || null;
+  const loading = vendor.loading || client.loading;
+  const isApproved = vendor.isApproved || false;
 
   // While auth state is being determined, render nothing (or a loader)
   if (loading) {

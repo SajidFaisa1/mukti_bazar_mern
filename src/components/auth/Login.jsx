@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react"
 import { Link, useNavigate, useLocation } from "react-router-dom"
-import { useAuth } from "../../contexts/VendorAuthContext"
+import { useVendorAuth } from "../../contexts/VendorAuthContext"
+import { useClientAuth } from "../../contexts/ClientAuthContext"
 import { auth, login, logout, signInWithGoogle } from "../../firebase"
 import { Eye, EyeOff, Loader2, AlertCircle, CheckCircle2 } from "lucide-react"
 import { FaGoogle, FaFacebook } from "react-icons/fa"
@@ -11,7 +12,9 @@ import '../../styles/login.css';
 const ModernLoginForm = () => {
   const navigate = useNavigate()
   const location = useLocation()
-  const { login: authLogin, loading: authLoading } = useAuth()
+  const { login: vendorLogin, loading: vendorLoading } = useVendorAuth()
+  const { login: clientLogin, loginWithGoogle: clientLoginWithGoogle, loading: clientLoading } = useClientAuth()
+  const authLoading = vendorLoading || clientLoading
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -73,7 +76,34 @@ const ModernLoginForm = () => {
     try {
       const loginData = formData
 
-      // For all logins (client, vendor), use Firebase Auth
+      // ---- CLIENT / VENDOR SEPARATE LOGIC ----
+      if (loginData.role === "client") {
+        await clientLogin({ email: loginData.email, password: loginData.password });
+        redirectUser("client");
+        return; // done
+        // ----- CLIENT login via JWT backend -----
+        try {
+          const res = await fetch("http://localhost:5005/api/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: loginData.email, password: loginData.password })
+          });
+          if (!res.ok) {
+            const { error = "Invalid credentials" } = await res.json().catch(() => ({}));
+            throw new Error(error);
+          }
+          const { token, user } = await res.json();
+          // Persist token for later authenticated requests (simple localStorage for now)
+          localStorage.setItem("clientToken", token);
+          redirectUser("client");
+          return; // done
+        } catch (clientErr) {
+          console.error("Client login error:", clientErr);
+          throw clientErr;
+        }
+      }
+
+      // ----- VENDOR login (Firebase + backend) -----
       let firebaseUser
       try {
         // Sign in with Firebase Authentication
@@ -103,8 +133,8 @@ const ModernLoginForm = () => {
           credentials.password = loginData.password
         }
 
-        // Perform backend login and update auth context
-        await authLogin(credentials)
+        // Call VendorAuthContext login
+        await vendorLogin({ email: loginData.email, password: loginData.password })
 
         // Redirect based on the role selected in the form
         redirectUser(loginData.role)
@@ -156,13 +186,8 @@ const ModernLoginForm = () => {
       // Use the imported signInWithGoogle function from firebase.js
       const user = await signInWithGoogle()
 
-      // This will trigger the onAuthStateChanged in AuthContext
-      await authLogin({
-        firebaseUid: user.uid,
-        email: user.email,
-        role: "client",
-      })
-
+      // Persist / login via backend using ClientAuthContext
+      await clientLoginWithGoogle({ uid: user.uid, email: user.email, name: user.displayName });
       // Redirect to home page
       navigate("/")
     } catch (error) {

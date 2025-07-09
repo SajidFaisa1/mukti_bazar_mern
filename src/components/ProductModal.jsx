@@ -31,9 +31,9 @@ const ProductModal = ({ product, onClose }) => {
   
   const handleAddToCart = () => {
     addToCart({
-      id: product.id,
-      title: product.title,
-      price: product.price,
+      id: product._id || product.id,
+      title: product.name,
+      price: product.offerPrice || product.unitPrice,
       images: product.images,
       quantity: quantity
     });
@@ -61,8 +61,8 @@ const ProductModal = ({ product, onClose }) => {
   const t = translations[language].productModal;
 
   // Calculate discount percentage
-  const discountPercentage = product.originalPrice 
-    ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
+  const discountPercentage = product.offerPrice && product.unitPrice
+    ? Math.round(((product.unitPrice - product.offerPrice) / product.unitPrice) * 100)
     : 0;
 
   const handleQuantityChange = (newQuantity) => {
@@ -87,7 +87,7 @@ const ProductModal = ({ product, onClose }) => {
         <div className="modal-body">
           <div className="product-gallery">
             <div className="main-image">
-              <img src={product.images?.[currentImage] || ''} alt={product.title} />
+              <img src={product.images?.[currentImage] || ''} alt={product.name} />
               {discountPercentage > 0 && (
                 <div className="discount-badge">
                   {discountPercentage}% OFF
@@ -95,7 +95,7 @@ const ProductModal = ({ product, onClose }) => {
               )}
             </div>
             <div className="thumbnail-container">
-              {product.images.map((image, index) => (
+              {product.images && product.images.map((image, index) => (
                 <div 
                   key={index} 
                   className={`thumbnail ${index === currentImage ? 'active' : ''}`}
@@ -103,7 +103,7 @@ const ProductModal = ({ product, onClose }) => {
                 >
                   <img 
                     src={image} 
-                    alt={`${product.title} ${index + 1}`} 
+                    alt={`${product.name} ${index + 1}`} 
                   />
                 </div>
               ))}
@@ -112,80 +112,41 @@ const ProductModal = ({ product, onClose }) => {
           
           <div className="product-details">
             <div className="product-header">
-              <h2>{product.title}</h2>
+              <h2>{product.name}</h2>
               <div className="price">
-                ৳{product.price.toFixed(2)} 
-                {product.originalPrice && (
-                  <span className="original-price">৳{product.originalPrice.toFixed(2)}</span>
+                ৳{product.offerPrice ? product.offerPrice.toFixed(2) : product.unitPrice.toFixed(2)}
+                {product.offerPrice && (
+                  <span className="original-price">৳{product.unitPrice.toFixed(2)}</span>
                 )}
-                <span className="unit"> / {product.unit}</span>
+                <span className="unit"> / {product.unitType}</span>
               </div>
             </div>
 
-            <div className="rating-availability">
-              {renderStars(product.rating)} <span className="review-count">({product.reviewCount})</span>
-              <span className={`availability ${product.inStock ? 'in-stock' : 'out-of-stock'}`}>
-                {product.inStock ? t.inStock : t.outOfStock}
-              </span>
+            <div className="stock">
+              <span>{product.totalQty > 0 ? t.inStock : t.outOfStock}</span>
             </div>
 
             <div className="product-details">
               <h3>{t.productDetails}</h3>
               <p>{product.description}</p>
-              
-              {product.details?.origin && (
+              {product.shelfLife && (
                 <div className="detail-row">
                   <FaLeaf className="detail-icon" />
-                  <span>Origin: {product.details.origin}</span>
+                  <span>Shelf Life: {product.shelfLife}</span>
                 </div>
               )}
-              
-              {product.details?.harvestDate && (
-                <div className="harvest-date">
-                  <FaClock className="info-icon" />
-                  <span>Harvested on {formatDate(product.details.harvestDate)}</span>
-                </div>
-              )}
-              
-              {product.details?.shelfLife && (
+              {product.estDeliveryTime && (
                 <div className="detail-row">
-                  <FaLeaf className="detail-icon" />
-                  <span>Shelf Life: {product.details.shelfLife}</span>
+                  <FaTruck className="detail-icon" />
+                  <span>Est. Delivery: {product.estDeliveryTime}</span>
                 </div>
               )}
-              
-              {product.details?.growingMethod && (
+              {product.deliveryOption && (
                 <div className="detail-row">
-                  <FaSeedling className="detail-icon" />
-                  <span>Growing Method: {product.details.growingMethod}</span>
+                  <FaTruck className="detail-icon" />
+                  <span>Delivery Option: {product.deliveryOption}</span>
                 </div>
               )}
-              
-              {product.details?.storageTips && (
-                <div className="storage-tips">
-                  <h4>{t.storageTips}</h4>
-                  <p>{product.details?.storageTips || (language === 'bn' ? 'শীতল ও শুষ্ক স্থানে সংরক্ষণ করুন।' : 'Store in a cool, dry place.')}</p>
-                </div>
-              )}
-            </div>
-
-            <div className="vendor-info">
-              <h4>{t.vendorInfo || 'Vendor Information'}</h4>
-              <div className="vendor-details">
-                <div className="vendor-name">
-                  <span>{t.soldBy}:</span>
-                  <strong>{product.vendor.name}</strong>
-                </div>
-                <div className="vendor-rating">
-                  {renderStars(product.vendor.rating)} ({product.vendor.totalSales} sales)
-                </div>
-                <div className="vendor-since">
-                  <FaCalendarAlt /> {t.vendorSince} {new Date(product.vendor.joinDate).getFullYear()}
-                </div>
-                <p className="vendor-location">
-                  <FaMapMarkerAlt /> {product.vendor.location}
-                </p>
-              </div>
             </div>
 
             <div className="quantity-selector">
@@ -206,13 +167,13 @@ const ProductModal = ({ product, onClose }) => {
 
             <div className="action-buttons">
               <button 
-                className={`add-to-cart-button ${!product.inStock ? 'out-of-stock-btn' : ''}`}
+                className={`add-to-cart-button ${product.totalQty <= 0 ? 'out-of-stock-btn' : ''}`}
                 onClick={handleAddToCart}
-                disabled={!product.inStock}
+                disabled={product.totalQty <= 0}
               >
-                {product.inStock ? (
+                {product.totalQty > 0 ? (
                   <>
-                    <FaShoppingCart /> {t.addToCart} (৳{(product.price * quantity).toFixed(2)})
+                    <FaShoppingCart /> {t.addToCart} (৳{((product.offerPrice || product.unitPrice) * quantity).toFixed(2)})
                   </>
                 ) : t.outOfStock}
               </button>

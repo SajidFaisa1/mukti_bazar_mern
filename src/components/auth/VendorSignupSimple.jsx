@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../contexts/VendorAuthContext';
+import { useVendorAuth } from '../../contexts/VendorAuthContext';
 
 const VendorSignupSimple = () => {
   const navigate = useNavigate();
-  const { signupVendor } = useAuth();
+  const { signupVendor } = useVendorAuth();
 
   const [form, setForm] = useState({
     businessName: '',

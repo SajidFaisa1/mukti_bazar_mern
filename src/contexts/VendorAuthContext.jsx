@@ -12,12 +12,12 @@ import {
 /*
   Minimal vendor-only auth context.
   – signupVendor: creates Firebase user, sends verify e-mail, POSTs minimal record to /api/vendors/signup
-  – loginVendor: Firebase email/password login, ensures e-mail verified, pulls vendor doc from /api/users/:uid
+  – loginVendor: Firebase email/password login, ensures e-mail verified, pulls vendor doc from /api/vendors/uid/:uid
   – logout
 */
 const VendorAuthContext = createContext();
 
-export const useVendorAuth = () => useContext(VendorAuthContext);
+export const useVendorAuth = () => useContext(VendorAuthContext) || {};
 // Temporary alias so legacy imports of useAuth / AuthProvider keep working
 export const useAuth = useVendorAuth;
 
@@ -46,10 +46,12 @@ export const VendorAuthProvider = ({ children }) => {
 
       // Fetch vendor doc
       try {
-        const r = await fetch(`http://localhost:5005/api/users/${firebaseUser.uid}`);
+        const r = await fetch(`http://localhost:5005/api/vendors/uid/${firebaseUser.uid}`);
         if (r.ok) {
           const vendorData = await r.json();
-          setUser({ ...vendorData, uid: firebaseUser.uid });
+          const fullVendor = { ...vendorData, uid: firebaseUser.uid };
+          setUser(fullVendor);
+          sessionStorage.setItem('vendorUser', JSON.stringify(fullVendor));
         }
       } catch (_) {}
       setLoading(false);
@@ -102,10 +104,12 @@ export const VendorAuthProvider = ({ children }) => {
         throw new Error('Please verify your email before logging in.');
       }
       // fetch vendor doc
-      const r = await fetch(`http://localhost:5005/api/users/${firebaseUser.uid}`);
+      const r = await fetch(`http://localhost:5005/api/vendors/uid/${firebaseUser.uid}`);
       if (!r.ok) throw new Error('Account not found.');
       const vendorData = await r.json();
-      setUser({ ...vendorData, uid: firebaseUser.uid });
+      const fullVendor = { ...vendorData, uid: firebaseUser.uid };
+          setUser(fullVendor);
+          sessionStorage.setItem('vendorUser', JSON.stringify(fullVendor));
     } catch (err) {
       console.error(err);
       setError(err.message || 'Login failed');
@@ -116,6 +120,7 @@ export const VendorAuthProvider = ({ children }) => {
 
   const logout = async () => {
     await firebaseSignOut(auth);
+    sessionStorage.removeItem('vendorUser');
     setUser(null);
   };
 

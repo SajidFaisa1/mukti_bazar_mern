@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../contexts/VendorAuthContext';
+import { useClientAuth } from '../../contexts/ClientAuthContext';
 
 const ClientSignupSimple = () => {
   const navigate = useNavigate();
-  const { signup } = useAuth();
+  const { signup, loading: authLoading, error: authError } = useClientAuth();
 
   const [form, setForm] = useState({
     firstName: '',
@@ -15,6 +15,9 @@ const ClientSignupSimple = () => {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    if (authError) setError(authError);
+  }, [authError]);
 
   const handleChange = e => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -38,7 +41,7 @@ const ClientSignupSimple = () => {
       alert('Account created. Please verify your email and then login.');
       navigate('/login');
     } catch (err) {
-      setError(err.response?.data?.error || 'Signup failed');
+      setError(err.message || 'Signup failed');
     } finally {
       setLoading(false);
     }
@@ -54,7 +57,7 @@ const ClientSignupSimple = () => {
         <input type="email" name="email" placeholder="Email" value={form.email} onChange={handleChange} required />
         <input type="password" name="password" placeholder="Password" value={form.password} onChange={handleChange} required />
         <input type="password" name="confirmPassword" placeholder="Confirm Password" value={form.confirmPassword} onChange={handleChange} required />
-        <button disabled={loading}>{loading ? 'Creating...' : 'Sign Up'}</button>
+        <button disabled={loading || authLoading}>{loading || authLoading ? 'Creating...' : 'Sign Up'}</button>
       </form>
     </div>
   );

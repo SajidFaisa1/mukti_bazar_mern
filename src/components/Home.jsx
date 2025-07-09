@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Carousel from './Carousel';
 import FeaturedItems from './FeaturedItems';
 import FeatureCards from './FeatureCards';
@@ -12,6 +12,15 @@ const Home = () => {
     'all', 'vegetables', 'fruits', 'dairy', 'grains', 'spices'
   ]);
 
+  // Fetch products from backend
+  const [products, setProducts] = useState([]);
+  useEffect(() => {
+    fetch('http://localhost:5005/api/products')
+      .then(res => res.json())
+      .then(data => setProducts(data))
+      .catch(err => console.error('Failed to fetch products', err));
+  }, []);
+
   return (
     <div className="home-container">
       {/* Hero Carousel */}
@@ -21,7 +30,7 @@ const Home = () => {
       <FeatureCards />
 
       {/* Featured Items Section */}
-      <FeaturedItems />
+      <FeaturedItems products={products} />
 
       {/* Products Section */}
       <div className="products-section">

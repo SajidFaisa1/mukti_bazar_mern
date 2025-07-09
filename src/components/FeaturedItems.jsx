@@ -1,23 +1,25 @@
+
 import React, { useState } from 'react';
-import { FaStar, FaShoppingCart, FaHeart, FaRegHeart, FaLeaf, FaFire, FaSearch } from 'react-icons/fa';
+import { FaShoppingCart, FaHeart, FaRegHeart, FaSearch } from 'react-icons/fa';
 import appLogo from '../assets/free.png';
 import ProductModal from './ProductModal';
-import productsData from '../data/products.json';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useCart } from '../contexts/CartContext';
 import { translations } from '../translations/translations';
-
-const { products } = productsData;
 import './FeaturedItems.css';
 
-const FeaturedItems = () => {
+// Accept products as a prop (should come from API, not mock data)
+const FeaturedItems = ({ products = [] }) => {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [favorites, setFavorites] = useState({});
   const { addToCart } = useCart();
-  
-  // Get first 4 products as featured items
-  const featuredProducts = products.slice(0, 4);
-  
+  const { language } = useLanguage();
+  const t = translations[language];
+
+  // Filter only featured products (isFeatured === true)
+  const featuredProducts = products.filter(p => p.isFeatured).slice(0, 4);
+
+  // Favorite toggle (UI only)
   const toggleFavorite = (productId, e) => {
     e.stopPropagation();
     setFavorites(prev => ({
@@ -25,37 +27,27 @@ const FeaturedItems = () => {
       [productId]: !prev[productId]
     }));
   };
-  
+
+  // Add to cart handler
   const handleAddToCart = (e, product) => {
     e.stopPropagation();
     addToCart({
-      id: product.id,
-      title: product.title,
-      price: product.price,
+      id: product._id || product.id,
+      title: product.name,
+      price: product.offerPrice || product.unitPrice,
       images: product.images,
       quantity: 1
     });
   };
-  
+
+  // Quick view modal
   const handleQuickView = (product) => {
     setSelectedProduct(product);
   };
-  
+
   const closeModal = () => {
     setSelectedProduct(null);
   };
-  
-  const renderStars = (rating) => {
-    return Array(5).fill(0).map((_, i) => (
-      <FaStar 
-        key={i} 
-        className={i < Math.floor(rating) ? 'filled' : 'empty'} 
-      />
-    ));
-  };
-
-  const { language } = useLanguage();
-  const t = translations[language];
 
   return (
     <section className="featured-items">
@@ -64,18 +56,17 @@ const FeaturedItems = () => {
           <h2 className="featured-title ">{t.featured.title}</h2>
           <p className="featured-subtitle">{t.featured.subtitle}</p>
         </div>
-        
+
         <div className="product-grid">
+          {featuredProducts.length === 0 && (
+            <p>{t.featured.noFeatured || 'No featured products available.'}</p>
+          )}
           {featuredProducts.map((product) => {
-            const isFavorite = favorites[product.id] || false;
-            const hasDiscount = product.originalPrice > product.price;
-            const discountPercentage = hasDiscount 
-              ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
-              : 0;
-              
+            const isFavorite = favorites[product._id || product.id] || false;
+            // Only use fields from Product model
             return (
-              <div 
-                key={product.id} 
+              <div
+                key={product._id || product.id}
                 className="product-card"
                 onClick={() => handleQuickView(product)}
               >
@@ -83,19 +74,18 @@ const FeaturedItems = () => {
                   <div className="app-logo-container">
                     <img src={appLogo} alt="App Logo" className="app-logo" />
                   </div>
-                  <img src={product.images[0]} alt={product.title} />
+                  <img src={product.images && product.images[0]} alt={product.name} />
                   <div className="product-badges">
-                    {product.isNew && <span className="badge new"><FaFire /> New</span>}
-                    {hasDiscount && (
-                      <span className="badge discount">-{discountPercentage}%</span>
+                    {product.barterAvailable && (
+                      <span className="badge barter">Barter</span>
                     )}
-                    {product.details?.organic && (
-                      <span className="badge organic"><FaLeaf /> Organic</span>
+                    {product.negotiationAvailable && (
+                      <span className="badge negotiation">Negotiable</span>
                     )}
                   </div>
-                  <button 
+                  <button
                     className={`favorite-button ${isFavorite ? 'active' : ''}`}
-                    onClick={(e) => toggleFavorite(product.id, e)}
+                    onClick={(e) => toggleFavorite(product._id || product.id, e)}
                     aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
                   >
                     {isFavorite ? <FaHeart /> : <FaRegHeart />}
@@ -105,46 +95,42 @@ const FeaturedItems = () => {
                   </div>
                 </div>
                 <div className="product-info">
-                  <h3>{product.title}</h3>
+                  <h3>{product.name}</h3>
                   <p className="product-category">{product.category}</p>
                   <p className="product-description">
-                    {product.shortDescription || product.description.substring(0, 80)}...
+                    {product.description?.substring(0, 80)}...
                   </p>
                   <div className="product-meta">
                     <div className="price">
-                    ৳{product.price.toFixed(2)}
-                      {hasDiscount && (
-                        <span className="original-price">৳{product.originalPrice.toFixed(2)}</span>
+                      ৳{product.offerPrice ? product.offerPrice.toFixed(2) : product.unitPrice.toFixed(2)}
+                      {product.offerPrice && (
+                        <span className="original-price">৳{product.unitPrice.toFixed(2)}</span>
                       )}
-                      <span className="unit"> / {product.unit}</span>
+                      <span className="unit"> / {product.unitType}</span>
                     </div>
-                    <div className="rating">
-                      <div className="stars">
-                        {renderStars(product.rating)}
-                        <span>({product.reviewCount})</span>
-                      </div>
+                    <div className="stock">
+                      <span>{product.totalQty > 0 ? `In stock: ${product.totalQty}` : 'Out of stock'}</span>
                     </div>
                   </div>
-                  <button 
+                  <button
                     className="add-to-cart-button"
                     onClick={(e) => handleAddToCart(e, product)}
-                    disabled={!product.inStock}
-                    aria-label={product.inStock ? 'Add to cart' : 'Out of stock'}
+                    disabled={product.totalQty <= 0}
+                    aria-label={product.totalQty > 0 ? 'Add to cart' : 'Out of stock'}
                   >
-                    <FaShoppingCart /> {product.inStock ? t.featured.addToCart : t.featured.outOfStock}
+                    <FaShoppingCart /> {product.totalQty > 0 ? t.featured.addToCart : t.featured.outOfStock}
                   </button>
                 </div>
               </div>
             );
           })}
         </div>
-        
+
         {selectedProduct && (
-          <ProductModal 
-            product={selectedProduct} 
+          <ProductModal
+            product={selectedProduct}
             onClose={closeModal}
             onAddToCart={(productId, quantity) => {
-              console.log(`Added ${quantity} of product ${productId} to cart`);
               closeModal();
             }}
           />
