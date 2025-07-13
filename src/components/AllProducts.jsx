@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { FaShoppingCart, FaHeart, FaRegHeart, FaSearch, FaInfoCircle } from 'react-icons/fa';
 import appLogo from '../assets/free.png';
@@ -6,65 +5,59 @@ import ProductModal from './ProductModal';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useCart } from '../contexts/CartContext';
 import { translations } from '../translations/translations';
+// Re-use existing styling from FeaturedItems to keep design consistent
 import './FeaturedItems.css';
 
-// Accept products as a prop (should come from API, not mock data)
-const FeaturedItems = ({ products = [] }) => {
+/**
+ * Displays all approved products from the DB (isApproved === true).
+ * Also supports optional category filtering passed from Home.
+ */
+const AllProducts = ({ products = [], filter = 'all' }) => {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [favorites, setFavorites] = useState({});
   const { addToCart } = useCart();
   const { language } = useLanguage();
   const t = translations[language];
 
-  // Filter only featured products (isFeatured === true)
-  const featuredProducts = products.filter(p => p.isFeatured).slice(0, 4);
+  // Filter: only approved and (optional) category
+  const approvedProducts = products
+    .filter((p) => p.isApproved)
+    .filter((p) => (filter === 'all' ? true : p.category === filter));
 
-  // Favorite toggle (UI only)
   const toggleFavorite = (productId, e) => {
     e.stopPropagation();
-    setFavorites(prev => ({
+    setFavorites((prev) => ({
       ...prev,
-      [productId]: !prev[productId]
+      [productId]: !prev[productId],
     }));
   };
 
-  // Add to cart handler
   const handleAddToCart = (e, product) => {
     e.stopPropagation();
+    const minQty = product.minOrderQty && product.minOrderQty > 0 ? product.minOrderQty : 1;
     addToCart({
       id: product._id || product.id,
       title: product.name,
       price: product.offerPrice || product.unitPrice,
       images: product.images,
-      quantity: product.minOrderQty && product.minOrderQty > 0 ? product.minOrderQty : 1,
-      minOrderQty: product.minOrderQty && product.minOrderQty > 0 ? product.minOrderQty : 1
+      quantity: minQty,
+      minOrderQty: minQty,
     });
   };
 
-  // Quick view modal
-  const handleQuickView = (product) => {
-    setSelectedProduct(product);
-  };
+  const handleQuickView = (product) => setSelectedProduct(product);
 
-  const closeModal = () => {
-    setSelectedProduct(null);
-  };
+  const closeModal = () => setSelectedProduct(null);
 
   return (
-    <section className="featured-items">
+    <section className="all-products-section">
       <div className="container">
-        <div className="section-header">
-          <h2 className="featured-title ">{t.featured.title}</h2>
-          <p className="featured-subtitle">{t.featured.subtitle}</p>
-        </div>
+        <h2 className="featured-title">{(t.home && t.home.allProducts)}</h2>
+        {approvedProducts.length === 0 && <p>{(t.home && t.home.noProducts) || 'No Products Available'}</p>}
 
         <div className="product-grid">
-          {featuredProducts.length === 0 && (
-            <p>{t.featured.noFeatured || 'No featured products available.'}</p>
-          )}
-          {featuredProducts.map((product) => {
+          {approvedProducts.map((product) => {
             const isFavorite = favorites[product._id || product.id] || false;
-            // Only use fields from Product model
             return (
               <div
                 key={product._id || product.id}
@@ -76,14 +69,6 @@ const FeaturedItems = ({ products = [] }) => {
                     <img src={appLogo} alt="App Logo" className="app-logo" />
                   </div>
                   <img src={product.images && product.images[0]} alt={product.name} />
-                  <div className="product-badges">
-                    {product.barterAvailable && (
-                      <span className="badge barter">Barter</span>
-                    )}
-                    {product.negotiationAvailable && (
-                      <span className="badge negotiation">Negotiable</span>
-                    )}
-                  </div>
                   <button
                     className={`favorite-button ${isFavorite ? 'active' : ''}`}
                     onClick={(e) => toggleFavorite(product._id || product.id, e)}
@@ -110,7 +95,9 @@ const FeaturedItems = ({ products = [] }) => {
                       <span className="unit"> / {product.unitType}</span>
                     </div>
                     <div className="stock">
-                      <span>{product.totalQty > 0 ? `In stock: ${product.totalQty}` : 'Out of stock'}</span>
+                      <span>
+                        {product.totalQty > 0 ? `In stock: ${product.totalQty}` : 'Out of stock'}
+                      </span>
                     </div>
                   </div>
                   {product.minOrderQty && (
@@ -125,7 +112,8 @@ const FeaturedItems = ({ products = [] }) => {
                     disabled={product.totalQty <= 0}
                     aria-label={product.totalQty > 0 ? 'Add to cart' : 'Out of stock'}
                   >
-                    <FaShoppingCart /> {product.totalQty > 0 ? t.featured.addToCart : t.featured.outOfStock}
+                    <FaShoppingCart />{' '}
+                    {product.totalQty > 0 ? t.featured.addToCart : t.featured.outOfStock}
                   </button>
                 </div>
               </div>
@@ -134,17 +122,11 @@ const FeaturedItems = ({ products = [] }) => {
         </div>
 
         {selectedProduct && (
-          <ProductModal
-            product={selectedProduct}
-            onClose={closeModal}
-            onAddToCart={(productId, quantity) => {
-              closeModal();
-            }}
-          />
+          <ProductModal product={selectedProduct} onClose={closeModal} />
         )}
       </div>
     </section>
   );
 };
 
-export default FeaturedItems;
+export default AllProducts;

@@ -63,6 +63,9 @@ export const ClientAuthProvider = ({ children }) => {
 
 
   const login = async ({ email, password }) => {
+    // Clear any vendor auth remnants when logging in as client
+    sessionStorage.removeItem('vendorUser');
+    sessionStorage.removeItem('vendorToken');
     setError('');
     setSuccess('');
     setLoading(true);
@@ -126,9 +129,14 @@ export const ClientAuthProvider = ({ children }) => {
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try { await firebaseLogout(); } catch (_) {}
+    // remove client artefacts
     localStorage.removeItem('clientToken');
     localStorage.removeItem('clientUser');
+    // also clear any vendor artefacts so session is clean
+    sessionStorage.removeItem('vendorUser');
+    sessionStorage.removeItem('vendorToken');
     setToken(null);
     setUser(null);
   };

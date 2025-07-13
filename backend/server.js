@@ -16,6 +16,7 @@ const userRoutes    = require('./routes/user');
 const authRoutes    = require('./routes/auth');
 const adminRoutes   = require('./routes/admin');
 const productRoutes = require('./routes/products');
+const addressRoutes = require('./routes/address');
 
 const app = express();
 app.use(express.json({ limit: '10mb' }));
@@ -27,6 +28,7 @@ app.use('/api/clients',  userRoutes);
 app.use('/api/auth',     authRoutes);
 app.use('/api/admin',    adminRoutes);
 app.use('/api/products', productRoutes);
+app.use('/api/addresses', addressRoutes);
 
 // Quick 410 for very old endpoints we deliberately removed
 ['/api/vendor/signup', '/api/client/signup'].forEach(path => {

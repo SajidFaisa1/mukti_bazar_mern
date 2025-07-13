@@ -68,4 +68,20 @@ router.post('/google-client', async (req, res) => {
   }
 });
 
+// POST /api/auth/vendor-jwt – issue JWT for vendor based on Firebase UID
+router.post('/vendor-jwt', async (req, res) => {
+  try {
+    const { uid } = req.body;
+    if (!uid) return res.status(400).json({ error: 'uid required' });
+    const vendor = await Vendor.findOne({ uid });
+    if (!vendor) return res.status(404).json({ error: 'Vendor not found' });
+
+    const token = jwt.sign({ id: vendor._id, role: 'vendor' }, process.env.JWT_SECRET, { expiresIn: '7d' });
+    res.json({ token });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 module.exports = router;

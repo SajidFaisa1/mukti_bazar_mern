@@ -174,6 +174,7 @@ const Navbar = () => {
                 <div className="profile-dropdown">
                   <Link to="/vendor/profile" className="dropdown-item" onClick={() => setShowProfileMenu(false)}>Finalize Profile</Link>
                   <Link to="/vendor/dashboard" className="dropdown-item" onClick={() => setShowProfileMenu(false)}>Dashboard</Link>
+                  <Link to="/settings" className="dropdown-item" onClick={() => setShowProfileMenu(false)}>Settings</Link>
                   <Link to="/support" className="dropdown-item" onClick={() => setShowProfileMenu(false)}>Support</Link>
                 </div>
               )}

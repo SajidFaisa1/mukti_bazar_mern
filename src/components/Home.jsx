@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Carousel from './Carousel';
 import FeaturedItems from './FeaturedItems';
+import AllProducts from './AllProducts';
 import FeatureCards from './FeatureCards';
 
 import './Home.css';
@@ -35,20 +36,10 @@ const Home = () => {
       {/* Products Section */}
       <div className="products-section">
         <div className="filter-container">
-          <h2>Our Products</h2>
-          <div className="filter-buttons">
-            {categories.map((cat) => (
-              <button
-                key={cat}
-                className={`filter-btn ${filter === cat ? 'active' : ''}`}
-                onClick={() => setFilter(cat)}
-              >
-                {cat.charAt(0).toUpperCase() + cat.slice(1)}
-              </button>
-            ))}
+          <h2>All Products</h2>
           </div>
-        </div>
-        
+        {/* All Products Grid */}
+        <AllProducts products={products} filter={filter} />
       </div>
     </div>
   );

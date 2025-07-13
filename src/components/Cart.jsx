@@ -16,8 +16,8 @@ const Cart = () => {
     itemCount 
   } = useCart();
 
-  const handleQuantityChange = (productId, newQuantity) => {
-    if (newQuantity >= 1) {
+  const handleQuantityChange = (productId, newQuantity, minQty = 1) => {
+    if (newQuantity >= minQty) {
       updateQuantity(productId, newQuantity);
     }
   };
@@ -54,17 +54,18 @@ const Cart = () => {
             />
             <div className="cart-item-details">
               <h3>{item.title}</h3>
-              <p className="price">${item.price.toFixed(2)}</p>
+              <p className="price">৳{item.price.toFixed(2)}</p>
               <div className="quantity-selector">
                 <button 
-                  onClick={() => handleQuantityChange(item.id, item.quantity - 1)}
+                  onClick={() => handleQuantityChange(item.id, item.quantity - 1, item.minOrderQty || 1)}
                   aria-label="Decrease quantity"
+                  disabled={item.quantity <= (item.minOrderQty || 1)}
                 >
                   <FaMinus />
                 </button>
                 <span>{item.quantity}</span>
                 <button 
-                  onClick={() => handleQuantityChange(item.id, item.quantity + 1)}
+                  onClick={() => handleQuantityChange(item.id, item.quantity + 1, item.minOrderQty || 1)}
                   aria-label="Increase quantity"
                 >
                   <FaPlus />
@@ -72,7 +73,7 @@ const Cart = () => {
               </div>
             </div>
             <div className="cart-item-total">
-              <p>${(item.price * item.quantity).toFixed(2)}</p>
+              <p>৳{(item.price * item.quantity).toFixed(2)}</p>
               <button 
                 onClick={() => removeFromCart(item.id)}
                 className="remove-item"
@@ -88,7 +89,7 @@ const Cart = () => {
       <div className="cart-summary">
         <div className="summary-row">
           <span>{t('cart.subtotal')}</span>
-          <span>${cartTotal.toFixed(2)}</span>
+          <span>৳{cartTotal.toFixed(2)}</span>
         </div>
         <div className="summary-row">
           <span>{t('cart.shipping')}</span>
@@ -96,12 +97,12 @@ const Cart = () => {
         </div>
         <div className="summary-row total">
           <span>{t('cart.total')}</span>
-          <span>${cartTotal.toFixed(2)}</span>
+          <span>৳{cartTotal.toFixed(2)}</span>
         </div>
         <button className="checkout-button">
           {t('cart.proceedToCheckout')}
         </button>
-        <Link to="/products" className="continue-shopping">
+        <Link to="/" className="continue-shopping">
           {t('cart.continueShopping')}
         </Link>
       </div>

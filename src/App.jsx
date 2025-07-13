@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom'
 import Navbar from './components/Navbar'
+import Footer from './components/Footer'
 import Home from './components/Home';
 import Analysis from './components/Analysis';
 import Chat from './components/Chat';
@@ -20,6 +21,8 @@ import AdminProtectedRoute from './components/auth/AdminProtectedRoute';
 import VendorProducts from './components/vendor/VendorProducts';
 import VendorDashboard from './components/vendor/VendorDashboard';
 import VendorProfileCompletion from './components/vendor/VendorProfileCompletion';
+import Settings from './components/settings/Settings';
+import AddressBook from './components/settings/AddressBook';
 import './App.css';
 import AdminLogin from './components/auth/AdminLogin';
 
@@ -37,8 +40,8 @@ function App() {
                 <Route path="/shops" element={<h1>Shops</h1>} />
                 <Route path="/categories" element={<h1>Categories</h1>} />
                 <Route path="/deals" element={<h1>Deals</h1>} />
-                <Route path="/cart" element={<ProtectedRoute element={<Cart />} />} />
-                <Route path="/user" element={<ProtectedRoute element={<UserProfile />} />} />
+                <Route path="/cart" element={<VendorAuthProvider><ProtectedRoute element={<Cart />} /></VendorAuthProvider>} />
+                <Route path="/user" element={<VendorAuthProvider><ProtectedRoute element={<UserProfile />} /></VendorAuthProvider>} />
                 <Route path="/analysis" element={<Analysis />} />
                 <Route path="/chat" element={<Chat />} />
                 <Route path="/login" element={<VendorAuthProvider><Login /></VendorAuthProvider>} />
@@ -61,6 +64,8 @@ function App() {
                     <ProtectedRoute element={<VendorProfileCompletion />} requiredRole="vendor" />
                   </VendorAuthProvider>
                 } />
+                <Route path="/settings" element={<VendorAuthProvider><ProtectedRoute element={<Settings />} /></VendorAuthProvider>} />
+                <Route path="/settings/address-book" element={<VendorAuthProvider><ProtectedRoute element={<AddressBook />} /></VendorAuthProvider>} />
                 <Route path="/vendor/orders" element={
                   <VendorAuthProvider>
                     <ProtectedRoute element={<h1>Vendor Orders</h1>} requiredRole="vendor" />
@@ -68,6 +73,7 @@ function App() {
                 } />
                 <Route path="/admin/login" element={<AdminLogin />} />
               </Routes>
+            <Footer />
             </div>
           </Router>
         </CartProvider>

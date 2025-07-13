@@ -35,7 +35,8 @@ const ProductModal = ({ product, onClose }) => {
       title: product.name,
       price: product.offerPrice || product.unitPrice,
       images: product.images,
-      quantity: quantity
+      quantity: quantity,
+      minOrderQty: minQty
     });
     // Optionally show a success message or notification here
   };
@@ -56,7 +57,8 @@ const ProductModal = ({ product, onClose }) => {
   };
 
   const [currentImage, setCurrentImage] = useState(0);
-  const [quantity, setQuantity] = useState(1);
+  const minQty = product.minOrderQty && product.minOrderQty > 0 ? product.minOrderQty : 1;
+  const [quantity, setQuantity] = useState(minQty);
   const { language } = useLanguage();
   const t = translations[language].productModal;
 
@@ -66,7 +68,7 @@ const ProductModal = ({ product, onClose }) => {
     : 0;
 
   const handleQuantityChange = (newQuantity) => {
-    if (newQuantity < 1) return;
+    if (newQuantity < minQty) return;
     setQuantity(newQuantity);
   };
 
@@ -147,6 +149,12 @@ const ProductModal = ({ product, onClose }) => {
                   <span>Delivery Option: {product.deliveryOption}</span>
                 </div>
               )}
+              {product.minOrderQty && (
+                <div className="min-qty-alert">
+                  <FaInfoCircle className="detail-icon" />
+                  <span>Minimum order quantity: {product.minOrderQty}</span>
+                </div>
+              )}
             </div>
 
             <div className="quantity-selector">
@@ -154,7 +162,7 @@ const ProductModal = ({ product, onClose }) => {
               <div className="quantity-controls">
                 <button 
                   onClick={() => handleQuantityChange(quantity - 1)}
-                  disabled={quantity <= 1}
+                  disabled={quantity <= minQty}
                 >
                   <FaMinus />
                 </button>

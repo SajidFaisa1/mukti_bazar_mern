@@ -26,6 +26,7 @@ export const VendorAuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [token, setToken] = useState(() => sessionStorage.getItem('vendorToken') || '');
 
   // Firebase listener keeps state in sync on refresh
   useEffect(() => {
@@ -49,6 +50,20 @@ export const VendorAuthProvider = ({ children }) => {
         const r = await fetch(`http://localhost:5005/api/vendors/uid/${firebaseUser.uid}`);
         if (r.ok) {
           const vendorData = await r.json();
+          // obtain backend JWT
+          try {
+            const jwtRes = await fetch('http://localhost:5005/api/auth/vendor-jwt', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ uid: firebaseUser.uid })
+            });
+            if (jwtRes.ok) {
+              const { token: jwt } = await jwtRes.json();
+              setToken(jwt);
+              sessionStorage.setItem('vendorToken', jwt);
+            }
+          } catch (_) {}
+
           const fullVendor = { ...vendorData, uid: firebaseUser.uid };
           setUser(fullVendor);
           sessionStorage.setItem('vendorUser', JSON.stringify(fullVendor));
@@ -94,6 +109,9 @@ export const VendorAuthProvider = ({ children }) => {
   };
 
   const loginVendor = async ({ email, password }) => {
+    // Clear any existing client auth remnants when logging in as vendor
+    localStorage.removeItem('clientToken');
+    localStorage.removeItem('clientUser');
     setError('');
     setLoading(true);
     try {
@@ -107,9 +125,24 @@ export const VendorAuthProvider = ({ children }) => {
       const r = await fetch(`http://localhost:5005/api/vendors/uid/${firebaseUser.uid}`);
       if (!r.ok) throw new Error('Account not found.');
       const vendorData = await r.json();
+
+      // obtain backend JWT to access protected routes
+      try {
+        const jwtRes = await fetch('http://localhost:5005/api/auth/vendor-jwt', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ uid: firebaseUser.uid })
+        });
+        if (jwtRes.ok) {
+          const { token: jwt } = await jwtRes.json();
+          setToken(jwt);
+          sessionStorage.setItem('vendorToken', jwt);
+        }
+      } catch (_) {}
+
       const fullVendor = { ...vendorData, uid: firebaseUser.uid };
-          setUser(fullVendor);
-          sessionStorage.setItem('vendorUser', JSON.stringify(fullVendor));
+      setUser(fullVendor);
+      sessionStorage.setItem('vendorUser', JSON.stringify(fullVendor));
     } catch (err) {
       console.error(err);
       setError(err.message || 'Login failed');
@@ -119,8 +152,13 @@ export const VendorAuthProvider = ({ children }) => {
   };
 
   const logout = async () => {
+    // also clear any client artefacts so session is clean
+    localStorage.removeItem('clientToken');
+    localStorage.removeItem('clientUser');
     await firebaseSignOut(auth);
     sessionStorage.removeItem('vendorUser');
+    sessionStorage.removeItem('vendorToken');
+    setToken('');
     setUser(null);
   };
 
@@ -131,6 +169,7 @@ export const VendorAuthProvider = ({ children }) => {
     user,
     role,
     isApproved,
+    token,
     loading,
     error,
     success,

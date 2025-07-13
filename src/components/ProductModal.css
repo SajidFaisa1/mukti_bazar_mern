@@ -736,6 +736,24 @@
   transform: translateY(-2px);
 }
 
+.min-qty-alert {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 15px 0;
+  padding: 12px;
+  background: #fff3cd; /* light amber */
+  border-left: 4px solid #ff9800; /* amber accent */
+  border-radius: 8px;
+  color: #795548;
+  font-weight: 600;
+}
+
+.min-qty-alert .detail-icon {
+  color: #ff9800;
+  margin-right: 8px;
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .modal-body {
