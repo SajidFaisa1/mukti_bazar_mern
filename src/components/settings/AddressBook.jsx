@@ -10,6 +10,10 @@ const AddressBook = () => {
   const vendorAuth = useVendorAuth() || {};
   const clientAuth = useClientAuth() || {};
   const token = vendorAuth.token || clientAuth.token || sessionStorage.getItem('vendorToken') || sessionStorage.getItem('clientToken') || '';
+  
+  // Determine current user info and role
+  const currentUser = vendorAuth.user || clientAuth.user;
+  const userRole = vendorAuth.user ? 'vendor' : (clientAuth.user ? 'client' : null);
 
   const [addresses, setAddresses] = useState([]);
   const [showModal, setShowModal] = useState(false);
@@ -63,7 +67,13 @@ const AddressBook = () => {
       </ul>
       <Link to="/settings" className="btn">Back to Settings</Link>
       {showModal && (
-        <AddAddressModal token={token} onClose={() => setShowModal(false)} onSaved={loadAddresses} />
+        <AddAddressModal 
+          token={token} 
+          uid={currentUser?.uid}
+          role={userRole}
+          onClose={() => setShowModal(false)} 
+          onSaved={loadAddresses} 
+        />
       )}
     </div>
   );

@@ -3,7 +3,7 @@ import axios from 'axios';
 import { getAllDivision, getAllDistrict, getAllUpazila, getAllUnion } from 'bd-divisions-to-unions';
 
 // Simple modal dialog for adding a new address
-const AddAddressModal = ({ token, onClose, onSaved }) => {
+const AddAddressModal = ({ token, uid, role, onClose, onSaved }) => {
   const [form, setForm] = useState({
     label: 'Home',
     name: '',
@@ -66,7 +66,8 @@ const AddAddressModal = ({ token, onClose, onSaved }) => {
         city: form.union || form.city,
         state: form.divisionName || form.state || '',
         district: form.districtName || '',
-
+        uid: uid, // Include the user's uid
+        role: role || 'client', // Include the user's role
         zip: form.zip,
         country: form.country,
         isDefault: form.isDefault,

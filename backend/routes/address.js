@@ -1,10 +1,67 @@
 const express = require('express');
 const Address = require('../models/Address');
+const User = require('../models/User');
+const Vendor = require('../models/Vendor');
 const { protect } = require('../middleware/auth');
 
 const router = express.Router();
 
-// All address routes require auth
+// Public route for getting default address by uid
+router.get('/default/:uid', async (req, res) => {
+  try {
+    const { uid } = req.params;
+    const defaultAddress = await Address.findOne({ uid, isDefault: true });
+    
+    if (!defaultAddress) {
+      return res.status(404).json({ error: 'No default address found' });
+    }
+    
+    res.json(defaultAddress);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Public route for creating address (for cart functionality)
+router.post('/', async (req, res) => {
+  try {
+    const { isDefault, uid, role, ...data } = req.body;
+    
+    // Find the user by uid in the appropriate collection based on role
+    let user = null;
+    if (role === 'vendor') {
+      user = await Vendor.findOne({ uid });
+    } else {
+      // Default to client/user collection
+      user = await User.findOne({ uid });
+    }
+    
+    if (!user) {
+      return res.status(404).json({ error: `${role === 'vendor' ? 'Vendor' : 'User'} not found` });
+    }
+    
+    // If this is set as default, unset other default addresses for this user
+    if (isDefault) {
+      await Address.updateMany({ uid, _id: { $exists: true } }, { isDefault: false });
+    }
+    
+    const address = await Address.create({ 
+      ...data, 
+      user: user._id, // Use the MongoDB ObjectId
+      uid,
+      role: role || 'client', // Save the role in the address
+      isDefault: !!isDefault 
+    });
+
+    res.status(201).json(address);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// All other address routes require auth
 router.use(protect);
 
 // GET /api/addresses – list logged-in user addresses
@@ -18,8 +75,8 @@ router.get('/', async (req, res) => {
   }
 });
 
-// POST /api/addresses – add new address
-router.post('/', async (req, res) => {
+// POST /api/addresses – add new address (protected route)
+router.post('/protected', async (req, res) => {
   try {
     const { isDefault, ...data } = req.body;
     const address = await Address.create({ ...data, user: req.user.id, role: req.user.role, isDefault: !!isDefault });
