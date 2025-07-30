@@ -59,7 +59,14 @@ const AdminPanel = () => {
         throw new Error('Failed to fetch products');
       }
       const data = await response.json();
-      setProducts(Array.isArray(data) ? data : []);
+      console.log('Admin Panel - Raw API response:', data);
+      
+      // Handle both old format (direct array) and new format (with products key)
+      const productsArray = data.products || data;
+      console.log('Admin Panel - Products array:', productsArray);
+      console.log('Admin Panel - Products count:', productsArray.length);
+      
+      setProducts(Array.isArray(productsArray) ? productsArray : []);
     } catch (error) {
       console.error('Error loading products:', error);
       setProductError(error.message);

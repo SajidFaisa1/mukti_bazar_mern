@@ -18,8 +18,19 @@ const Home = () => {
   useEffect(() => {
     fetch('http://localhost:5005/api/products')
       .then(res => res.json())
-      .then(data => setProducts(data))
-      .catch(err => console.error('Failed to fetch products', err));
+      .then(data => {
+        // Handle the response structure {products: [...], pagination: {...}}
+        if (data.products && Array.isArray(data.products)) {
+          setProducts(data.products);
+        } else {
+          console.error('Products data is not in expected format:', data);
+          setProducts([]);
+        }
+      })
+      .catch(err => {
+        console.error('Failed to fetch products', err);
+        setProducts([]);
+      });
   }, []);
 
   return (

@@ -16,6 +16,7 @@ import logo2 from '../assets/Mukti.png';
 
 const Navbar = () => {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const profileRef = useRef(null);
 
     // Grab both auth contexts (either may be undefined if its provider isn't mounted)
@@ -68,6 +69,23 @@ const Navbar = () => {
     localStorage.removeItem('clientUser');
 
     navigate('/');
+  };
+
+  const handleSearch = (e) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
+    }
+  };
+
+  const handleSearchInputChange = (e) => {
+    setSearchQuery(e.target.value);
+  };
+
+  const handleSearchKeyPress = (e) => {
+    if (e.key === 'Enter') {
+      handleSearch(e);
+    }
   };
 
   // Close dropdown when clicking outside
@@ -130,6 +148,14 @@ const Navbar = () => {
             
             
           )}
+          {user && (
+            <Link 
+              to="/orders" 
+              className={`nav-link br-hendrix font-size-regular ${isActive('/orders') ? 'active' : ''}`}
+            >
+              My Orders
+            </Link>
+          )}
           <Link 
             to="/deals" 
             className={`nav-link br-hendrix font-size-regular ${isActive('/deals') ? 'active' : ''}`}
@@ -145,14 +171,19 @@ const Navbar = () => {
         </div>
 
         <div className="navbar-search">
-          <input 
-            type="text" 
-            placeholder="Search products..."
-            className="search-input"
-          />
-          <button className="search-button">
-            <FontAwesomeIcon className='bg-icon' icon={faSearch} />
-          </button>
+          <form onSubmit={handleSearch} className="search-form">
+            <input 
+              type="text" 
+              placeholder="Search products..."
+              className="search-input"
+              value={searchQuery}
+              onChange={handleSearchInputChange}
+              onKeyPress={handleSearchKeyPress}
+            />
+            <button type="submit" className="search-button">
+              <FontAwesomeIcon className='bg-icon' icon={faSearch} />
+            </button>
+          </form>
         </div>
 
         <div className="navbar-actions">
@@ -174,6 +205,7 @@ const Navbar = () => {
                 <div className="profile-dropdown">
                   <Link to="/vendor/profile" className="dropdown-item" onClick={() => setShowProfileMenu(false)}>Finalize Profile</Link>
                   <Link to="/vendor/dashboard" className="dropdown-item" onClick={() => setShowProfileMenu(false)}>Dashboard</Link>
+                  <Link to="/orders" className="dropdown-item" onClick={() => setShowProfileMenu(false)}>My Orders</Link>
                   <Link to="/settings" className="dropdown-item" onClick={() => setShowProfileMenu(false)}>Settings</Link>
                   <Link to="/support" className="dropdown-item" onClick={() => setShowProfileMenu(false)}>Support</Link>
                 </div>

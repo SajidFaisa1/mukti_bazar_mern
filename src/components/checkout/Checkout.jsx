@@ -130,20 +130,26 @@ const Checkout = () => {
       );
       
       if (result.success) {
-        setOrderDetails(result);
-        setShowSuccess(true);
-        
-        // Redirect to order confirmation after 3 seconds
-        setTimeout(() => {
-          if (result.orderNumbers && result.orderNumbers.length > 1) {
-            // Multiple orders - redirect to orders list
-            navigate('/orders');
-          } else {
-            // Single order - redirect to specific order confirmation
-            const orderNumber = result.orderNumber || result.orderNumbers?.[0];
-            navigate(`/order-confirmation/${orderNumber}`);
-          }
-        }, 3000);
+        if (result.isOnlinePayment && result.gateway_url) {
+          // For online payments, redirect to SSLCommerz
+          window.location.href = result.gateway_url;
+        } else {
+          // For COD, show success and redirect
+          setOrderDetails(result);
+          setShowSuccess(true);
+          
+          // Redirect to order confirmation after 3 seconds
+          setTimeout(() => {
+            if (result.orderNumbers && result.orderNumbers.length > 1) {
+              // Multiple orders - redirect to orders list
+              navigate('/orders');
+            } else {
+              // Single order - redirect to specific order confirmation
+              const orderNumber = result.orderNumber || result.orderNumbers?.[0];
+              navigate(`/order-confirmation/${orderNumber}`);
+            }
+          }, 3000);
+        }
       }
     } catch (error) {
       setCheckoutError(error.message || 'Failed to process checkout');

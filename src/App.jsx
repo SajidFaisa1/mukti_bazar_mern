@@ -25,8 +25,15 @@ import VendorProducts from './components/vendor/VendorProducts';
 import VendorDashboard from './components/vendor/VendorDashboard';
 import VendorProfileCompletion from './components/vendor/VendorProfileCompletion';
 import VendorOrders from './components/vendor/VendorOrders';
+import BarterManagement from './components/vendor/BarterManagement';
+import MyOrders from './components/orders/MyOrders';
+import OrderDetails from './components/orders/OrderDetails';
 import Settings from './components/settings/Settings';
 import AddressBook from './components/settings/AddressBook';
+import PaymentSuccess from './components/payment/PaymentSuccess';
+import PaymentFailed from './components/payment/PaymentFailed';
+import PaymentCancel from './components/payment/PaymentCancel';
+import SearchResults from './components/SearchResults';
 import './App.css';
 import AdminLogin from './components/auth/AdminLogin';
 
@@ -40,10 +47,11 @@ function App() {
           <div className="app">
               <Navbar />
               <Routes>
-                <Route path="/" element={<Home />} />
+                <Route path="/" element={<VendorAuthProvider><Home /></VendorAuthProvider>} />
+                <Route path="/search" element={<VendorAuthProvider><SearchResults /></VendorAuthProvider>} />
                 <Route path="/shops" element={<h1>Shops</h1>} />
                 <Route path="/categories" element={<h1>Categories</h1>} />
-                <Route path="/deals" element={<Deals />} />
+                <Route path="/deals" element={<VendorAuthProvider><Deals /></VendorAuthProvider>} />
                 <Route path="/cart" element={<VendorAuthProvider><ProtectedRoute element={<Cart />} /></VendorAuthProvider>} />
                 <Route path="/checkout" element={<VendorAuthProvider><ProtectedRoute element={<Checkout />} /></VendorAuthProvider>} />
                 <Route path="/order-confirmation/:orderNumber" element={<VendorAuthProvider><ProtectedRoute element={<OrderConfirmation />} /></VendorAuthProvider>} />
@@ -77,6 +85,16 @@ function App() {
                     <ProtectedRoute element={<VendorOrders />} requiredRole="vendor" />
                   </VendorAuthProvider>
                 } />
+                <Route path="/vendor/barter" element={
+                  <VendorAuthProvider>
+                    <ProtectedRoute element={<BarterManagement />} requiredRole="vendor" />
+                  </VendorAuthProvider>
+                } />
+                <Route path="/orders" element={<VendorAuthProvider><ProtectedRoute element={<MyOrders />} /></VendorAuthProvider>} />
+                <Route path="/orders/:orderNumber" element={<VendorAuthProvider><ProtectedRoute element={<OrderDetails />} /></VendorAuthProvider>} />
+                <Route path="/payment/success" element={<VendorAuthProvider><ProtectedRoute element={<PaymentSuccess />} /></VendorAuthProvider>} />
+                <Route path="/payment/fail" element={<VendorAuthProvider><ProtectedRoute element={<PaymentFailed />} /></VendorAuthProvider>} />
+                <Route path="/payment/cancel" element={<VendorAuthProvider><ProtectedRoute element={<PaymentCancel />} /></VendorAuthProvider>} />
                 <Route path="/admin/login" element={<AdminLogin />} />
               </Routes>
             <Footer />

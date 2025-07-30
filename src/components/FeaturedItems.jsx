@@ -16,8 +16,10 @@ const FeaturedItems = ({ products = [] }) => {
   const { language } = useLanguage();
   const t = translations[language];
 
-  // Filter only featured products (isFeatured === true)
-  const featuredProducts = products.filter(p => p.isFeatured).slice(0, 4);
+  // Ensure products is an array and filter only featured products (isFeatured === true)
+  const featuredProducts = Array.isArray(products) 
+    ? products.filter(p => p.isFeatured).slice(0, 4)
+    : [];
 
   // Favorite toggle (UI only)
   const toggleFavorite = (productId, e) => {

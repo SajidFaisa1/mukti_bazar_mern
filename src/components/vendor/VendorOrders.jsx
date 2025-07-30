@@ -12,7 +12,9 @@ import {
   Calendar,
   DollarSign,
   Filter,
-  Search
+  Search,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import './VendorOrders.css';
 
@@ -131,8 +133,9 @@ const VendorOrders = () => {
           <button 
             key="confirm" 
             onClick={() => updateOrderStatus(order.orderNumber, 'confirmed')}
-            className="btn btn-sm btn-success"
+            className="modern-btn success"
           >
+            <CheckCircle size={16} />
             Confirm Order
           </button>
         );
@@ -140,8 +143,9 @@ const VendorOrders = () => {
           <button 
             key="cancel" 
             onClick={() => updateOrderStatus(order.orderNumber, 'cancelled', 'Order cancelled by vendor')}
-            className="btn btn-sm btn-danger"
+            className="modern-btn danger"
           >
+            <XCircle size={16} />
             Cancel
           </button>
         );
@@ -151,8 +155,9 @@ const VendorOrders = () => {
           <button 
             key="process" 
             onClick={() => updateOrderStatus(order.orderNumber, 'processing')}
-            className="btn btn-sm btn-primary"
+            className="modern-btn primary"
           >
+            <Package size={16} />
             Start Processing
           </button>
         );
@@ -162,8 +167,9 @@ const VendorOrders = () => {
           <button 
             key="ship" 
             onClick={() => updateOrderStatus(order.orderNumber, 'shipped')}
-            className="btn btn-sm btn-info"
+            className="modern-btn info"
           >
+            <Truck size={16} />
             Mark as Shipped
           </button>
         );
@@ -173,8 +179,9 @@ const VendorOrders = () => {
           <button 
             key="deliver" 
             onClick={() => updateOrderStatus(order.orderNumber, 'delivered')}
-            className="btn btn-sm btn-success"
+            className="modern-btn success"
           >
+            <CheckCircle size={16} />
             Mark as Delivered
           </button>
         );
@@ -197,7 +204,7 @@ const VendorOrders = () => {
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: 'USD'
+      currency: 'BDT'
     }).format(amount);
   };
 
@@ -207,53 +214,87 @@ const VendorOrders = () => {
 
   return (
     <div className="vendor-orders-container">
+      {/* Modern Header */}
       <div className="vendor-orders-header">
-        <h1>My Orders</h1>
-        <p>Manage and track your customer orders</p>
+        <div className="header-content">
+          <div className="header-text">
+            <h1>Order Management</h1>
+            <p>Track and manage your customer orders efficiently</p>
+          </div>
+          <div className="header-stats">
+            <div className="stat-card">
+              <Package className="stat-icon" size={20} />
+              <div>
+                <span className="stat-number">{pagination.totalOrders}</span>
+                <span className="stat-label">Total Orders</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Filters */}
+      {/* Modern Filters */}
       <div className="orders-filters">
-        <div className="filter-group">
-          <Filter size={16} />
-          <select 
-            value={filters.status} 
-            onChange={(e) => setFilters({...filters, status: e.target.value})}
-          >
-            <option value="all">All Orders</option>
-            <option value="pending">Pending</option>
-            <option value="confirmed">Confirmed</option>
-            <option value="processing">Processing</option>
-            <option value="shipped">Shipped</option>
-            <option value="delivered">Delivered</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
-        </div>
-        
-        <div className="search-group">
-          <Search size={16} />
-          <input
-            type="text"
-            placeholder="Search by order number..."
-            value={filters.search}
-            onChange={(e) => setFilters({...filters, search: e.target.value})}
-          />
+        <div className="filters-container">
+          <div className="filter-section">
+            <div className="filter-group">
+              <label>
+                <Filter size={16} />
+                Status Filter
+              </label>
+              <select 
+                value={filters.status} 
+                onChange={(e) => setFilters({...filters, status: e.target.value})}
+                className="modern-select"
+              >
+                <option value="all">All Orders</option>
+                <option value="pending">Pending</option>
+                <option value="confirmed">Confirmed</option>
+                <option value="processing">Processing</option>
+                <option value="shipped">Shipped</option>
+                <option value="delivered">Delivered</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </div>
+            
+            <div className="search-group">
+              <label>
+                <Search size={16} />
+                Search Orders
+              </label>
+              <input
+                type="text"
+                placeholder="Search by order number..."
+                value={filters.search}
+                onChange={(e) => setFilters({...filters, search: e.target.value})}
+                className="modern-input"
+              />
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Loading State */}
       {loading && (
-        <div className="loading-state">
-          <div className="spinner"></div>
-          <p>Loading orders...</p>
+        <div className="modern-loading-state">
+          <div className="loading-animation">
+            <div className="loading-spinner"></div>
+          </div>
+          <h3>Loading orders...</h3>
+          <p>Please wait while we fetch your orders</p>
         </div>
       )}
 
       {/* Error State */}
       {error && (
-        <div className="error-state">
+        <div className="modern-error-state">
+          <XCircle size={48} className="error-icon" />
+          <h3>Something went wrong</h3>
           <p className="error-message">{error}</p>
-          <button onClick={() => fetchOrders(1, filters.status, filters.search)}>
+          <button 
+            onClick={() => fetchOrders(1, filters.status, filters.search)}
+            className="retry-button"
+          >
             Try Again
           </button>
         </div>
@@ -263,59 +304,79 @@ const VendorOrders = () => {
       {!loading && !error && (
         <>
           {orders.length === 0 ? (
-            <div className="empty-state">
-              <Package size={48} />
-              <h3>No orders found</h3>
-              <p>You haven't received any orders yet.</p>
+            <div className="modern-empty-state">
+              <div className="empty-icon">
+                <Package size={64} />
+              </div>
+              <h3>No orders yet</h3>
+              <p>Orders from customers will appear here once you start receiving them.</p>
             </div>
           ) : (
-            <div className="orders-list">
+            <div className="modern-orders-grid">
               {orders.map((order) => (
-                <div key={order._id} className="order-card">
-                  <div className="order-header">
-                    <div className="order-info">
-                      <h3>#{order.orderNumber}</h3>
-                      <div className="order-status">
+                <div key={order._id} className="modern-order-card">
+                  <div className="order-card-header">
+                    <div className="order-primary-info">
+                      <h3 className="order-number">#{order.orderNumber}</h3>
+                      <div className={`modern-status-badge ${order.status}`}>
                         {getStatusIcon(order.status)}
-                        <span className={`status-text ${order.status}`}>
-                          {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
-                        </span>
+                        <span>{order.status.charAt(0).toUpperCase() + order.status.slice(1)}</span>
                       </div>
                     </div>
-                    <div className="order-amount">
-                      <DollarSign size={16} />
-                      {formatCurrency(order.total)}
+                    <div className="order-amount-display">
+                      <span className="amount-label">Total</span>
+                      <span className="amount-value">{formatCurrency(order.total)}</span>
                     </div>
                   </div>
 
-                  <div className="order-details">
-                    <div className="order-meta">
-                      <div className="meta-item">
-                        <Calendar size={14} />
-                        <span>Ordered: {formatDate(order.orderedAt)}</span>
+                  <div className="order-card-body">
+                    <div className="order-meta-grid">
+                      <div className="meta-card">
+                        <Calendar size={16} className="meta-icon" />
+                        <div>
+                          <span className="meta-label">Ordered</span>
+                          <span className="meta-value">{formatDate(order.orderedAt)}</span>
+                        </div>
                       </div>
-                      <div className="meta-item">
-                        <Package size={14} />
-                        <span>{order.itemCount} items</span>
+                      <div className="meta-card">
+                        <Package size={16} className="meta-icon" />
+                        <div>
+                          <span className="meta-label">Items</span>
+                          <span className="meta-value">{order.itemCount}</span>
+                        </div>
                       </div>
-                      <div className="meta-item">
-                        <Truck size={14} />
-                        <span>{order.deliveryMethod}</span>
+                      <div className="meta-card">
+                        <DollarSign size={16} className="meta-icon" />
+                        <div>
+                          <span className="meta-label">Payment Status</span>
+                          <span className={`meta-value payment-${order.paymentStatus || 'pending'}`}>
+                            {(order.paymentStatus || 'pending').charAt(0).toUpperCase() + (order.paymentStatus || 'pending').slice(1)}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="meta-card">
+                        <Truck size={16} className="meta-icon" />
+                        <div>
+                          <span className="meta-label">Delivery</span>
+                          <span className="meta-value">{order.deliveryMethod}</span>
+                        </div>
                       </div>
                     </div>
 
-                    <div className="customer-info">
-                      <h4>Customer Details</h4>
-                      <div className="customer-details">
-                        <div className="detail-item">
-                          <User size={14} />
-                          <span>{order.deliveryAddress.name}</span>
+                    <div className="customer-section">
+                      <h4 className="section-title">
+                        <User size={16} />
+                        Customer Information
+                      </h4>
+                      <div className="customer-card">
+                        <div className="customer-main">
+                          <span className="customer-name">{order.deliveryAddress.name}</span>
+                          <span className="customer-phone">
+                            <Phone size={14} />
+                            {order.deliveryAddress.phone}
+                          </span>
                         </div>
-                        <div className="detail-item">
-                          <Phone size={14} />
-                          <span>{order.deliveryAddress.phone}</span>
-                        </div>
-                        <div className="detail-item">
+                        <div className="customer-address">
                           <MapPin size={14} />
                           <span>
                             {order.deliveryAddress.addressLine1}, {order.deliveryAddress.city}, 
@@ -325,65 +386,106 @@ const VendorOrders = () => {
                       </div>
                     </div>
 
-                    <div className="order-items">
-                      <h4>Order Items</h4>
-                      <div className="items-list">
-                        {order.items.map((item, index) => (
-                          <div key={index} className="item-row">
-                            <div className="item-info">
-                              <span className="item-name">{item.name}</span>
-                              <span className="item-details">
-                                {item.quantity} × {formatCurrency(item.price || item.unitPrice)}
-                              </span>
+                    <div className="items-section">
+                      <h4 className="section-title">
+                        <Package size={16} />
+                        Order Items
+                      </h4>
+                      <div className="items-grid">
+                        {order.items.map((item, index) => {
+                          // Debug log to check image data
+                          console.log('Item data:', {
+                            name: item.name,
+                            images: item.images,
+                            image: item.image,
+                            productSnapshot: item.productSnapshot
+                          });
+                          
+                          return (
+                            <div key={index} className="modern-item-card">
+                              <div className="item-image-container">
+                                <img 
+                                  src={item.images?.[0] || item.image || item.productSnapshot?.images?.[0] || '/placeholder-product.jpg'} 
+                                  alt={item.name}
+                                  className="item-image"
+                                  onError={(e) => {
+                                    console.log('Image load error for item:', item.name, 'Attempted URL:', e.target.src);
+                                    e.target.src = '/placeholder-product.jpg';
+                                  }}
+                                />
+                              </div>
+                              <div className="item-details">
+                                <span className="item-name">{item.name}</span>
+                                <span className="item-quantity">Qty: {item.quantity}</span>
+                              </div>
+                              <div className="item-pricing">
+                                <span className="item-unit-price">{formatCurrency(item.price || item.unitPrice)}</span>
+                                <span className="item-total-price">
+                                  {formatCurrency((item.price || item.unitPrice) * item.quantity)}
+                                </span>
+                              </div>
                             </div>
-                            <span className="item-total">
-                              {formatCurrency((item.price || item.unitPrice) * item.quantity)}
-                            </span>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
 
-                    {order.notes && (
-                      <div className="order-notes">
-                        <h4>Customer Notes</h4>
-                        <p>{order.notes}</p>
-                      </div>
-                    )}
-
-                    {order.specialInstructions && (
-                      <div className="order-instructions">
-                        <h4>Special Instructions</h4>
-                        <p>{order.specialInstructions}</p>
+                    {(order.notes || order.specialInstructions) && (
+                      <div className="notes-section">
+                        {order.notes && (
+                          <div className="note-card">
+                            <h5>Customer Notes</h5>
+                            <p>{order.notes}</p>
+                          </div>
+                        )}
+                        {order.specialInstructions && (
+                          <div className="note-card">
+                            <h5>Special Instructions</h5>
+                            <p>{order.specialInstructions}</p>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
 
-                  <div className="order-actions">
-                    {getStatusActions(order)}
+                  <div className="order-card-footer">
+                    <div className="action-buttons">
+                      {getStatusActions(order)}
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
           )}
 
-          {/* Pagination */}
+          {/* Modern Pagination */}
           {pagination.totalPages > 1 && (
-            <div className="pagination">
+            <div className="modern-pagination">
               <button 
                 onClick={() => fetchOrders(pagination.currentPage - 1, filters.status, filters.search)}
                 disabled={pagination.currentPage === 1}
+                className="pagination-btn prev"
               >
+                <ChevronLeft size={16} />
                 Previous
               </button>
-              <span>
-                Page {pagination.currentPage} of {pagination.totalPages}
-              </span>
+              
+              <div className="pagination-info">
+                <span className="page-info">
+                  Page {pagination.currentPage} of {pagination.totalPages}
+                </span>
+                <span className="total-info">
+                  ({pagination.totalOrders} total orders)
+                </span>
+              </div>
+              
               <button 
                 onClick={() => fetchOrders(pagination.currentPage + 1, filters.status, filters.search)}
                 disabled={pagination.currentPage === pagination.totalPages}
+                className="pagination-btn next"
               >
                 Next
+                <ChevronRight size={16} />
               </button>
             </div>
           )}

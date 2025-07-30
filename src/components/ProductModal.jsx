@@ -16,18 +16,83 @@ import {
   FaInfoCircle, 
   FaMapMarkerAlt,
   FaClock ,
-  FaSeedling 
+  FaSeedling,
+  FaExchangeAlt
 } from 'react-icons/fa';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useCart } from '../contexts/CartContext';
+import { useVendorAuth } from '../contexts/VendorAuthContext';
+import { useClientAuth } from '../contexts/ClientAuthContext';
 import { translations } from '../translations/translations';
 import muktiLogo from '../assets/Mukti.png';
+import BarterOffer from './BarterOffer';
 import './ProductModal.css';
 
 const ProductModal = ({ product, onClose }) => {
   const { addToCart } = useCart();
+  const { currentUser: vendorAuthUser, token: vendorAuthToken } = useVendorAuth();
+  const { currentUser: clientAuthUser, token: clientAuthToken } = useClientAuth();
+  const [showBarterOffer, setShowBarterOffer] = useState(false);
   
   if (!product) return null;
+  
+  // Determine current user and their role with fallback to storage
+  let currentUser = null;
+  let userRole = null;
+  let userToken = null;
+  
+  // Check vendor auth first
+  if (vendorAuthUser) {
+    currentUser = vendorAuthUser;
+    userRole = 'vendor';
+    userToken = vendorAuthToken;
+  } else if (clientAuthUser) {
+    currentUser = clientAuthUser;
+    userRole = 'client';
+    userToken = clientAuthToken;
+  } else {
+    // Fallback to storage if contexts are not available
+    const clientUser = JSON.parse(localStorage.getItem('clientUser') || 'null');
+    if (clientUser) {
+      currentUser = clientUser;
+      userRole = 'client';
+      userToken = localStorage.getItem('clientToken');
+    } else {
+      const vendorUser = JSON.parse(sessionStorage.getItem('vendorUser') || 'null');
+      if (vendorUser) {
+        currentUser = vendorUser;
+        userRole = 'vendor';
+        userToken = sessionStorage.getItem('vendorToken');
+      }
+    }
+  }
+  
+  // Check if current user is a vendor and it's not their own product
+  const canMakeBarter = userRole === 'vendor' && 
+                       product.barterAvailable && 
+                       currentUser?.uid !== product.vendorUid;
+  
+  // Debug logging
+  console.log('🔍 BARTER DEBUG:', {
+    userRole,
+    currentUserUid: currentUser?.uid,
+    productVendorUid: product.vendorUid,
+    barterAvailable: product.barterAvailable,
+    canMakeBarter,
+    vendorUser: !!vendorAuthUser,
+    clientUser: !!clientAuthUser,
+    fallbackVendor: !vendorAuthUser && !clientAuthUser ? !!JSON.parse(sessionStorage.getItem('vendorUser') || 'null') : false,
+    fallbackClient: !vendorAuthUser && !clientAuthUser ? !!JSON.parse(localStorage.getItem('clientUser') || 'null') : false,
+    isSameVendor: currentUser?.uid === product.vendorUid,
+    productStock: product.totalQty,
+    buttonWillShow: canMakeBarter,
+    reason: !canMakeBarter ? (
+      userRole !== 'vendor' ? 'Not a vendor' :
+      !product.barterAvailable ? 'Barter not available for product' :
+      currentUser?.uid === product.vendorUid ? 'Cannot barter with own product' :
+      'Unknown reason'
+    ) : 'Button should show'
+  });
   
   const handleAddToCart = () => {
     addToCart({
@@ -39,6 +104,16 @@ const ProductModal = ({ product, onClose }) => {
       minOrderQty: minQty
     });
     // Optionally show a success message or notification here
+  };
+
+  const handleBarterClick = () => {
+    console.log('🔄 BARTER BUTTON CLICKED!');
+    if (!currentUser) {
+      alert('Please login as a vendor to make barter offers');
+      return;
+    }
+    console.log('✅ Setting showBarterOffer to true');
+    setShowBarterOffer(true);
   };
 
   const renderStars = (rating) => {
@@ -149,6 +224,34 @@ const ProductModal = ({ product, onClose }) => {
                   <span>Delivery Option: {product.deliveryOption}</span>
                 </div>
               )}
+              {product.barterAvailable && (
+                <div className="detail-row barter-available">
+                  <FaExchangeAlt className="detail-icon" />
+                  <span>Barter Exchange Available</span>
+                  {userRole === 'vendor' && currentUser?.uid !== product.vendorUid && (
+                    <span 
+                      className="barter-badge clickable-badge"
+                      onClick={handleBarterClick}
+                      style={{
+                        cursor: 'pointer',
+                        textDecoration: 'underline',
+                        color: '#FF9800'
+                      }}
+                    >
+                      Trade Eligible - Click to Barter
+                    </span>
+                  )}
+                  {userRole === 'vendor' && currentUser?.uid === product.vendorUid && (
+                    <span className="barter-badge">Your Product - Cannot Barter</span>
+                  )}
+                  {!userRole && (
+                    <span className="barter-badge">Login as Vendor to Barter</span>
+                  )}
+                  {userRole === 'client' && (
+                    <span className="barter-badge">Only Vendors Can Barter</span>
+                  )}
+                </div>
+              )}
               {product.minOrderQty && (
                 <div className="min-qty-alert">
                   <FaInfoCircle className="detail-icon" />
@@ -185,10 +288,39 @@ const ProductModal = ({ product, onClose }) => {
                   </>
                 ) : t.outOfStock}
               </button>
+              
+              {canMakeBarter && (
+                <button 
+                  className="barter-button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('🔄 BARTER BUTTON CLICKED!', e);
+                    handleBarterClick();
+                  }}
+                  disabled={product.totalQty <= 0}
+                  style={{ 
+                    pointerEvents: 'auto', 
+                    zIndex: 1000,
+                    backgroundColor: product.totalQty <= 0 ? '#ccc' : '#FF9800',
+                    cursor: product.totalQty <= 0 ? 'not-allowed' : 'pointer',
+                    border: '2px solid red',
+                    position: 'relative'
+                  }}
+                  onMouseOver={() => console.log('🖱️ Barter button hovered')}
+                  onMouseDown={() => console.log('🖱️ Barter button mouse down')}
+                  onMouseUp={() => console.log('🖱️ Barter button mouse up')}
+                >
+                  <FaExchangeAlt /> Propose Barter
+                </button>
+              )}
+              
               <button className="wishlist-button">
                 <FaHeart /> {t.addToWishlist}
               </button>
             </div>
+            
+            {console.log('🔢 Rendering barter button:', canMakeBarter, 'Stock:', product.totalQty)}
 
             <div className="shipping-info">
               <div className="shipping-item">
@@ -211,6 +343,14 @@ const ProductModal = ({ product, onClose }) => {
             </div>
           </div>
         </div>
+        
+        {showBarterOffer && (
+          <BarterOffer 
+            product={product}
+            onClose={() => setShowBarterOffer(false)}
+            currentUser={currentUser}
+          />
+        )}
       </div>
     </div>
   );

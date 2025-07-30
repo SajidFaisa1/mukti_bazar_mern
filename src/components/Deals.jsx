@@ -40,8 +40,13 @@ const Deals = () => {
         return res.json();
       })
       .then(data => {
+        // Handle the response structure {products: [...], pagination: {...}}
+        const productsArray = data.products && Array.isArray(data.products) ? data.products : data;
+        
         // Filter products that have offerPrice
-        const dealsProducts = data.filter(p => p.offerPrice && p.offerPrice < p.unitPrice);
+        const dealsProducts = Array.isArray(productsArray) 
+          ? productsArray.filter(p => p.offerPrice && p.offerPrice < p.unitPrice)
+          : [];
         setProducts(dealsProducts);
         setLoading(false);
       })

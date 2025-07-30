@@ -19,10 +19,12 @@ const AllProducts = ({ products = [], filter = 'all' }) => {
   const { language } = useLanguage();
   const t = translations[language];
 
-  // Filter: only approved and (optional) category
-  const approvedProducts = products
-    .filter((p) => p.isApproved)
-    .filter((p) => (filter === 'all' ? true : p.category === filter));
+  // Filter: only approved and (optional) category, with safety check for array
+  const approvedProducts = Array.isArray(products)
+    ? products
+        .filter((p) => p.isApproved)
+        .filter((p) => (filter === 'all' ? true : p.category === filter))
+    : [];
 
   const toggleFavorite = (productId, e) => {
     e.stopPropagation();

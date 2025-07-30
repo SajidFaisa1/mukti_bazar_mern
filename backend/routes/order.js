@@ -431,12 +431,34 @@ router.get('/vendor/orders', protect, async (req, res) => {
 
     const orders = await Order.find(query, null, options)
       .populate('deliveryAddress')
-      .populate('user', 'name email phone');
+      .populate('user', 'name email phone')
+      .populate({
+        path: 'items.product',
+        select: 'name images productSnapshot'
+      });
+    
+    // Ensure images are available in the response
+    const processedOrders = orders.map(order => {
+      const orderObj = order.toObject();
+      orderObj.items = orderObj.items.map(item => {
+        // Ensure image is available from multiple sources
+        if (!item.images || item.images.length === 0) {
+          if (item.product && item.product.images) {
+            item.images = item.product.images;
+          } else if (item.productSnapshot && item.productSnapshot.images) {
+            item.images = item.productSnapshot.images;
+          }
+        }
+        return item;
+      });
+      return orderObj;
+    });
+    
     const total = await Order.countDocuments(query);
 
     res.json({
       success: true,
-      orders,
+      orders: processedOrders,
       pagination: {
         currentPage: parseInt(page),
         totalPages: Math.ceil(total / limit),

@@ -229,43 +229,81 @@ export const CartProvider = ({ children }) => {
         throw new Error('Authentication required');
       }
 
-      const response = await fetch(`http://localhost:5005/api/orders/checkout`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ paymentMethod, notes, specialInstructions })
-      });
+      // Check if it's an online payment method
+      const onlinePaymentMethods = ['card', 'mobile-banking', 'bank-transfer'];
+      const isOnlinePayment = onlinePaymentMethods.includes(paymentMethod);
+
+      let response;
+      
+      if (isOnlinePayment) {
+        // Use SSLCommerz for online payments
+        response = await fetch(`http://localhost:5005/api/payment/init`, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ paymentMethod, notes, specialInstructions })
+        });
+      } else {
+        // Use regular checkout for COD
+        response = await fetch(`http://localhost:5005/api/orders/checkout`, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ paymentMethod, notes, specialInstructions })
+        });
+      }
 
       if (response.ok) {
         const result = await response.json();
-        // Clear the current cart since it's now an order
-        const emptyCart = { 
-          items: [], 
-          subtotal: 0, 
-          total: 0, 
-          itemCount: 0,
-          deliveryAddress: null,
-          deliveryMethod: null,
-          deliveryFee: 0
-        };
-        dispatch({ type: 'SET_CART', payload: emptyCart });
         
-        // Force refresh the cart from server to ensure we have the latest state
-        setTimeout(async () => {
-          try {
-            const cartResponse = await fetch(`http://localhost:5005/api/cart/uid/${uid}`);
-            if (cartResponse.ok) {
-              const cartData = await cartResponse.json();
-              dispatch({ type: 'SET_CART', payload: cartData });
+        if (isOnlinePayment && result.gateway_url) {
+          // For online payments, redirect to SSLCommerz
+          return {
+            success: true,
+            isOnlinePayment: true,
+            gateway_url: result.gateway_url,
+            redirect_url: result.redirect_url,
+            sessionkey: result.sessionkey,
+            orders: result.orders,
+            totalAmount: result.totalAmount,
+            tranId: result.tranId
+          };
+        } else {
+          // For COD, clear cart and return success
+          const emptyCart = { 
+            items: [], 
+            subtotal: 0, 
+            total: 0, 
+            itemCount: 0,
+            deliveryAddress: null,
+            deliveryMethod: null,
+            deliveryFee: 0
+          };
+          dispatch({ type: 'SET_CART', payload: emptyCart });
+          
+          // Force refresh the cart from server to ensure we have the latest state
+          setTimeout(async () => {
+            try {
+              const cartResponse = await fetch(`http://localhost:5005/api/cart/uid/${uid}`);
+              if (cartResponse.ok) {
+                const cartData = await cartResponse.json();
+                dispatch({ type: 'SET_CART', payload: cartData });
+              }
+            } catch (error) {
+              console.error('Failed to refresh cart after checkout:', error);
             }
-          } catch (error) {
-            console.error('Failed to refresh cart after checkout:', error);
-          }
-        }, 100);
-        
-        return result;
+          }, 100);
+          
+          return {
+            success: true,
+            isOnlinePayment: false,
+            ...result
+          };
+        }
       } else {
         const error = await response.json();
         throw new Error(error.message || 'Failed to checkout');

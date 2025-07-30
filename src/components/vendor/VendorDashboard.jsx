@@ -86,6 +86,7 @@ const VendorDashboard = () => {
       <div className="action-buttons">
         <Link className="btn" to="/vendor/products">Manage Products</Link>
         <Link className="btn" to="/vendor/orders">View Orders</Link>
+        <Link className="btn" to="/vendor/barter">Barter Management</Link>
         <Link className="btn" to="/vendor/profile">Edit Profile</Link>
       </div>
     </div>

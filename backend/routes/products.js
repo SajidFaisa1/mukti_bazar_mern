@@ -69,11 +69,11 @@ router.delete('/:id', async (req, res) => {
 // Admin review endpoints
 // -------------------------
 
-// GET /api/products?status=pending|approved
-// Returns products filtered by approval status. If no status provided, returns all (non-deleted) products.
+// GET /api/products?status=pending|approved&search=query
+// Returns products filtered by approval status and search query
 router.get('/', async (req, res) => {
   try {
-    const { status } = req.query;
+    const { status, search, page = 1, limit = 12 } = req.query;
     const filter = { isDeleted: { $ne: true } };
 
     if (status === 'pending') {
@@ -82,8 +82,35 @@ router.get('/', async (req, res) => {
       filter.isApproved = true;
     }
 
-    const items = await Product.find(filter).sort({ createdAt: -1 });
-    res.json(items);
+    // Add search functionality
+    if (search && search.trim()) {
+      const searchRegex = new RegExp(search.trim(), 'i');
+      filter.$or = [
+        { name: { $regex: searchRegex } },
+        { description: { $regex: searchRegex } },
+        { category: { $regex: searchRegex } },
+        { businessName: { $regex: searchRegex } }
+      ];
+    }
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const items = await Product.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+    
+    const total = await Product.countDocuments(filter);
+
+    res.json({
+      products: items,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(total / parseInt(limit)),
+        totalProducts: total,
+        hasNext: skip + items.length < total,
+        hasPrev: parseInt(page) > 1
+      }
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });

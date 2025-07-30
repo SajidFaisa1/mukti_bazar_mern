@@ -160,6 +160,24 @@ orderSchema.methods.updateStatus = function(newStatus, note = '', updatedBy = 's
   return this.save();
 };
 
+// Method to restore product stock when order is cancelled
+orderSchema.methods.restoreStock = async function() {
+  const Product = mongoose.model('Product');
+  
+  for (const item of this.items) {
+    const product = await Product.findById(item.product);
+    if (product) {
+      // Restore the stock quantity
+      product.totalQty += item.quantity;
+      await product.save();
+      
+      console.log(`Stock restored for ${product.name}: ${product.totalQty - item.quantity} -> ${product.totalQty}`);
+    } else {
+      console.warn(`Product not found for stock restoration: ${item.name}`);
+    }
+  }
+};
+
 // Method to create order from cart
 orderSchema.statics.createFromCart = async function(cart, paymentMethod, notes = '', specialInstructions = '') {
   const orderNumber = this.generateOrderNumber(cart.role);
@@ -184,6 +202,26 @@ orderSchema.statics.createFromCart = async function(cart, paymentMethod, notes =
       zip: address.zip,
       label: address.label
     };
+  }
+  
+  // Update product stock quantities
+  const Product = mongoose.model('Product');
+  for (const item of cart.items) {
+    const product = await Product.findById(item.product);
+    if (!product) {
+      throw new Error(`Product not found: ${item.name}`);
+    }
+    
+    // Check if sufficient stock is available
+    if (product.totalQty < item.quantity) {
+      throw new Error(`Insufficient stock for ${item.name}. Available: ${product.totalQty}, Requested: ${item.quantity}`);
+    }
+    
+    // Decrease the stock quantity
+    product.totalQty -= item.quantity;
+    await product.save();
+    
+    console.log(`Stock updated for ${product.name}: ${product.totalQty + item.quantity} -> ${product.totalQty}`);
   }
   
   const orderData = {
