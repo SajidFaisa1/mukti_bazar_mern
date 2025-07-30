@@ -925,7 +925,7 @@ const  BarterManagement = () => {
                       }}
                       disabled={actionLoading}
                     >
-                      <FaTimes /> Reject
+                      <FaTimes /> Rejects
                     </button>
                   </>
                 )}
