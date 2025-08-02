@@ -4,6 +4,9 @@ import Footer from './components/Footer'
 import Home from './components/Home';
 import Analysis from './components/Analysis';
 import Chat from './components/Chat';
+import MessagingInterface from './components/messaging/MessagingInterface';
+import GroupManagement from './components/messaging/GroupManagement';
+import FloatingMessageButton from './components/messaging/FloatingMessageButton';
 import Deals from './components/Deals';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { VendorAuthProvider } from './contexts/VendorAuthContext';
@@ -58,6 +61,7 @@ function App() {
                 <Route path="/user" element={<VendorAuthProvider><ProtectedRoute element={<UserProfile />} /></VendorAuthProvider>} />
                 <Route path="/analysis" element={<Analysis />} />
                 <Route path="/chat" element={<Chat />} />
+                <Route path="/messages" element={<VendorAuthProvider><ProtectedRoute element={<MessagingInterface />} /></VendorAuthProvider>} />
                 <Route path="/login" element={<VendorAuthProvider><Login /></VendorAuthProvider>} />
                 <Route path="/signup" element={<SignupChoice />} />
                 <Route path="/signup/client" element={<ClientSignupSimple />} />
@@ -90,6 +94,11 @@ function App() {
                     <ProtectedRoute element={<BarterManagement />} requiredRole="vendor" />
                   </VendorAuthProvider>
                 } />
+                <Route path="/vendor/groups" element={
+                  <VendorAuthProvider>
+                    <ProtectedRoute element={<GroupManagement />} requiredRole="vendor" />
+                  </VendorAuthProvider>
+                } />
                 <Route path="/orders" element={<VendorAuthProvider><ProtectedRoute element={<MyOrders />} /></VendorAuthProvider>} />
                 <Route path="/orders/:orderNumber" element={<VendorAuthProvider><ProtectedRoute element={<OrderDetails />} /></VendorAuthProvider>} />
                 <Route path="/payment/success" element={<VendorAuthProvider><ProtectedRoute element={<PaymentSuccess />} /></VendorAuthProvider>} />
@@ -97,6 +106,12 @@ function App() {
                 <Route path="/payment/cancel" element={<VendorAuthProvider><ProtectedRoute element={<PaymentCancel />} /></VendorAuthProvider>} />
                 <Route path="/admin/login" element={<AdminLogin />} />
               </Routes>
+              
+              {/* Floating Message Button - appears on all pages */}
+              <VendorAuthProvider>
+                <FloatingMessageButton />
+              </VendorAuthProvider>
+              
             <Footer />
             </div>
           </Router>

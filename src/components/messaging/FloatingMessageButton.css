@@ -1,0 +1,117 @@
+.floating-message-button {
+  position: fixed;
+  bottom: 30px;
+  right: 30px;
+  width: 60px;
+  height: 60px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+  transition: all 0.3s ease;
+  z-index: 1000;
+  border: none;
+  outline: none;
+}
+
+.floating-message-button:hover {
+  transform: scale(1.1);
+  box-shadow: 0 12px 35px rgba(102, 126, 234, 0.6);
+}
+
+
+
+.message-button-content {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.message-button-icon {
+  color: white;
+  font-size: 24px;
+  transition: all 0.3s ease;
+}
+
+.floating-unread-badge {
+  position: absolute;
+  top: -12px;
+  right: -12px;
+  background: #ff4757;
+  color: white;
+  border-radius: 50%;
+  min-width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  border: 3px solid white;
+  box-shadow: 0 2px 8px rgba(255, 71, 87, 0.4);
+  animation: floatingBadgePulse 2s infinite;
+}
+
+@keyframes floatingBadgePulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.8;
+  }
+}
+
+
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .floating-message-button {
+    bottom: 20px;
+    right: 20px;
+    width: 50px;
+    height: 50px;
+  }
+  
+  .message-button-icon {
+    font-size: 20px;
+  }
+  
+  .floating-unread-badge {
+    min-width: 20px;
+    height: 20px;
+    font-size: 10px;
+    top: -8px;
+    right: -8px;
+    border-width: 2px;
+  }
+}
+
+@media (max-width: 480px) {
+  .floating-message-button {
+    bottom: 15px;
+    right: 15px;
+    width: 45px;
+    height: 45px;
+  }
+  
+  .message-button-icon {
+    font-size: 18px;
+  }
+}
+
+/* Accessibility */
+.floating-message-button:focus {
+  outline: 3px solid rgba(102, 126, 234, 0.5);
+  outline-offset: 2px;
+}
+
+/* Hide on messaging page */
+body.messaging-page .floating-message-button {
+  display: none;
+}

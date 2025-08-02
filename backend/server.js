@@ -21,6 +21,9 @@ const cartRoutes    = require('./routes/cart');
 const orderRoutes   = require('./routes/order');
 const paymentRoutes = require('./routes/payment');
 const barterRoutes  = require('./routes/barter');
+const messageRoutes = require('./routes/messages');
+const groupRoutes   = require('./routes/groups');
+const negotiationRoutes = require('./routes/negotiation');
 
 const app = express();
 app.use(express.json({ limit: '10mb' }));
@@ -37,6 +40,9 @@ app.use('/api/cart', cartRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/barter', barterRoutes);
+app.use('/api/messages', messageRoutes);
+app.use('/api/groups', groupRoutes);
+app.use('/api/negotiations', negotiationRoutes);
 
 // Quick 410 for very old endpoints we deliberately removed
 ['/api/vendor/signup', '/api/client/signup'].forEach(path => {

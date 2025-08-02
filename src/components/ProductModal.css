@@ -502,7 +502,7 @@
   flex-wrap: wrap;
 }
 
-.add-to-cart-button, .wishlist-button, .barter-button {
+.add-to-cart-button, .wishlist-button, .barter-button, .contact-vendor-modal-btn, .negotiation-modal-btn {
   flex: 1;
   min-width: 180px;
   padding: 15px 20px;
@@ -550,6 +550,50 @@
 }
 
 .barter-button:disabled {
+  background: #cccccc;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.contact-vendor-modal-btn {
+  background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+  color: white;
+  box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);
+  text-transform: none;
+  font-size: 14px;
+  min-width: 160px;
+}
+
+.contact-vendor-modal-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(76, 175, 80, 0.4);
+  background: linear-gradient(135deg, #45a049 0%, #4CAF50 100%);
+}
+
+.contact-vendor-modal-btn:disabled {
+  background: #cccccc;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.negotiation-modal-btn {
+  background: linear-gradient(135deg, #FF6B35 0%, #F7931E 100%);
+  color: white;
+  box-shadow: 0 4px 15px rgba(255, 107, 53, 0.3);
+  text-transform: none;
+  font-size: 14px;
+  min-width: 160px;
+}
+
+.negotiation-modal-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(255, 107, 53, 0.4);
+  background: linear-gradient(135deg, #F7931E 0%, #FF6B35 100%);
+}
+
+.negotiation-modal-btn:disabled {
   background: #cccccc;
   cursor: not-allowed;
   transform: none;
@@ -660,6 +704,47 @@
 
 .stock span {
   display: inline-block;
+}
+
+/* Vendor Information Styles */
+.vendor-info {
+  margin: 20px 0;
+  padding: 15px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border-left: 4px solid #4CAF50;
+}
+
+.vendor-info h4 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  color: #666;
+  font-weight: 500;
+}
+
+.vendor-details {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.vendor-name {
+  font-weight: 600;
+  font-size: 16px;
+  color: #2d3436;
+}
+
+.vendor-location {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 14px;
+  color: #6c757d;
+}
+
+.location-icon {
+  color: #4CAF50;
+  font-size: 12px;
 }
 
 .storage-tips li {
@@ -1125,7 +1210,7 @@
     gap: 10px;
   }
   
-  .add-to-cart-button, .wishlist-button, .barter-button {
+  .add-to-cart-button, .wishlist-button, .barter-button, .contact-vendor-modal-btn, .negotiation-modal-btn {
     width: 100%;
     min-width: auto;
   }
@@ -1190,7 +1275,7 @@
     font-size: 0.9rem;
   }
 
-  .add-to-cart-button, .wishlist-button, .barter-button {
+  .add-to-cart-button, .wishlist-button, .barter-button, .contact-vendor-modal-btn, .negotiation-modal-btn {
     padding: 12px 16px;
     font-size: 0.9rem;
   }

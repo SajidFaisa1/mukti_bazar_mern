@@ -26,6 +26,8 @@ import { useClientAuth } from '../contexts/ClientAuthContext';
 import { translations } from '../translations/translations';
 import muktiLogo from '../assets/Mukti.png';
 import BarterOffer from './BarterOffer';
+import ContactVendorButton from './messaging/ContactVendorButton';
+import NegotiationButton from './negotiation/NegotiationButton';
 import './ProductModal.css';
 
 const ProductModal = ({ product, onClose }) => {
@@ -33,6 +35,8 @@ const ProductModal = ({ product, onClose }) => {
   const { currentUser: vendorAuthUser, token: vendorAuthToken } = useVendorAuth();
   const { currentUser: clientAuthUser, token: clientAuthToken } = useClientAuth();
   const [showBarterOffer, setShowBarterOffer] = useState(false);
+  const [vendorInfo, setVendorInfo] = useState(null);
+  const [loadingVendor, setLoadingVendor] = useState(false);
   
   if (!product) return null;
   
@@ -71,6 +75,41 @@ const ProductModal = ({ product, onClose }) => {
   const canMakeBarter = userRole === 'vendor' && 
                        product.barterAvailable && 
                        currentUser?.uid !== product.vendorUid;
+
+  // Fetch vendor information when product changes
+  useEffect(() => {
+    const fetchVendorInfo = async () => {
+      if (!product.vendorUid && !product.storeId) return;
+      
+      setLoadingVendor(true);
+      try {
+        // Try to fetch by vendorUid first, then by storeId
+        let vendorResponse;
+        if (product.vendorUid) {
+          vendorResponse = await fetch(`http://localhost:5005/api/vendors/uid/${product.vendorUid}`);
+        } else if (product.storeId) {
+          vendorResponse = await fetch(`http://localhost:5005/api/vendors/store/${product.storeId}`);
+        }
+        
+        if (vendorResponse.ok) {
+          const vendor = await vendorResponse.json();
+          setVendorInfo(vendor);
+        } else {
+          console.error('Failed to fetch vendor info');
+        }
+      } catch (error) {
+        console.error('Error fetching vendor info:', error);
+      } finally {
+        setLoadingVendor(false);
+      }
+    };
+
+    fetchVendorInfo();
+  }, [product.vendorUid, product.storeId]);
+  
+  // Check if current user can contact vendor (not their own product)
+  const canContactVendor = currentUser && vendorInfo && 
+                          currentUser.uid !== product.vendorUid;
   
   // Debug logging
   console.log('🔍 BARTER DEBUG:', {
@@ -203,6 +242,30 @@ const ProductModal = ({ product, onClose }) => {
               <span>{product.totalQty > 0 ? t.inStock : t.outOfStock}</span>
             </div>
 
+            {/* Vendor Information */}
+            {loadingVendor ? (
+              <div className="vendor-info">
+                <h4>Loading store information...</h4>
+              </div>
+            ) : vendorInfo ? (
+              <div className="vendor-info">
+                <h4>Sold by:</h4>
+                <div className="vendor-details">
+                  <span className="vendor-name">{vendorInfo.businessName}</span>
+                  {vendorInfo.address && (
+                    <span className="vendor-location">
+                      <FaMapMarkerAlt className="location-icon" />
+                      {vendorInfo.address.city}, {vendorInfo.address.district}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ) : product.vendorUid || product.storeId ? (
+              <div className="vendor-info">
+                <h4>Store information unavailable</h4>
+              </div>
+            ) : null}
+
             <div className="product-details">
               <h3>{t.productDetails}</h3>
               <p>{product.description}</p>
@@ -288,6 +351,30 @@ const ProductModal = ({ product, onClose }) => {
                   </>
                 ) : t.outOfStock}
               </button>
+              
+              {/* Contact Vendor Button */}
+              {canContactVendor && vendorInfo && (
+                <ContactVendorButton 
+                  product={product}
+                  vendor={vendorInfo}
+                  className="contact-vendor-modal-btn"
+                />
+              )}
+              
+              {/* Negotiation Button */}
+              {canContactVendor && vendorInfo && (
+                <NegotiationButton 
+                  product={product}
+                  vendor={vendorInfo}
+                  className="negotiation-modal-btn"
+                  onNegotiationStarted={(negotiation) => {
+                    console.log('Negotiation started:', negotiation);
+                    // Optionally close modal and redirect to messages
+                    // onClose();
+                    // window.location.href = '/messages';
+                  }}
+                />
+              )}
               
               {canMakeBarter && (
                 <button 

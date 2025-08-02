@@ -10,6 +10,7 @@ import { auth } from '../firebase';
 import { signOut as firebaseSignOut } from 'firebase/auth';
 import { useNavigate } from 'react-router-dom';
 import { translations } from '../translations/translations';
+import MessageNotificationIcon from './messaging/MessageNotificationIcon';
 import './navbar.css';
 import logo from '../assets/logo.png';
 import logo2 from '../assets/Mukti.png';
@@ -192,6 +193,9 @@ const Navbar = () => {
             {cartItemCount > 0 && <span className="cart-badge">{cartItemCount}</span>}
             <span className="sr-only">Cart ({cartItemCount} items)</span>
           </Link>
+          
+          {/* Message Notification Icon */}
+          <MessageNotificationIcon />
           
           
           {user ? (

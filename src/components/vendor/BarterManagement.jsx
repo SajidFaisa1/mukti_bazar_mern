@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { FaExchangeAlt, FaClock, FaCheck, FaTimes, FaEye, FaPlus } from 'react-icons/fa';
+import CreateBarterModal from './CreateBarterModal';
 import './BarterManagement.css';
 
 const  BarterManagement = () => {
@@ -11,6 +12,7 @@ const  BarterManagement = () => {
   const [selectedBarter, setSelectedBarter] = useState(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showCounterOfferModal, setShowCounterOfferModal] = useState(false);
+  const [showCreateBarterModal, setShowCreateBarterModal] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
@@ -689,7 +691,10 @@ const  BarterManagement = () => {
           </h1>
           <p>Manage your product exchange offers</p>
         </div>
-        <button className="create-barter-btn">
+        <button 
+          className="create-barter-btn"
+          onClick={() => setShowCreateBarterModal(true)}
+        >
           <FaPlus /> Create New Barter
         </button>
       </div>
@@ -770,7 +775,10 @@ const  BarterManagement = () => {
               : "You don't have any barter offers yet."
             }
           </p>
-          <button className="create-barter-btn">
+          <button 
+            className="create-barter-btn"
+            onClick={() => setShowCreateBarterModal(true)}
+          >
             <FaPlus /> Create Your First Barter
           </button>
         </div>
@@ -925,7 +933,7 @@ const  BarterManagement = () => {
                       }}
                       disabled={actionLoading}
                     >
-                      <FaTimes /> Rejects
+                      <FaTimes /> Reject
                     </button>
                   </>
                 )}
@@ -937,6 +945,11 @@ const  BarterManagement = () => {
       
       {showDetailsModal && <BarterDetailsModal />}
       {showCounterOfferModal && <CounterOfferModal />}
+      <CreateBarterModal 
+        isOpen={showCreateBarterModal}
+        onClose={() => setShowCreateBarterModal(false)}
+        onSuccess={() => fetchBarters()}
+      />
     </div>
   );
 };

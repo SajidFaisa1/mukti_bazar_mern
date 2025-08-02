@@ -1,0 +1,131 @@
+.message-notification-icon {
+  position: relative;
+  text-decoration: none;
+  display: inline-block;
+  margin: 0 10px;
+  transition: all 0.3s ease;
+}
+
+.message-notification-icon:hover {
+  transform: scale(1.05);
+}
+
+.message-icon-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.message-icon-container:hover {
+  background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+.message-icon {
+  color: white;
+  font-size: 18px;
+  transition: all 0.3s ease;
+}
+
+.message-icon.has-unread {
+  animation: messageAlert 2s infinite;
+}
+
+@keyframes messageAlert {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
+
+.unread-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: #ff4757;
+  color: white;
+  border-radius: 50%;
+  min-width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  border: 2px solid white;
+  box-shadow: 0 2px 8px rgba(255, 71, 87, 0.3);
+  animation: badgePulse 2s infinite;
+}
+
+@keyframes badgePulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.8;
+  }
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .message-icon-container {
+    width: 35px;
+    height: 35px;
+  }
+  
+  .message-icon {
+    font-size: 16px;
+  }
+  
+  .unread-badge {
+    min-width: 18px;
+    height: 18px;
+    font-size: 10px;
+    top: -6px;
+    right: -6px;
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .unread-badge {
+    border-color: #2c2c2c;
+  }
+}
+
+/* Accessibility */
+.message-notification-icon:focus {
+  outline: 2px solid #667eea;
+  outline-offset: 2px;
+  border-radius: 50%;
+}
+
+.message-notification-icon:focus .message-icon-container {
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+}
+
+/* Loading state */
+.message-icon-container.loading {
+  opacity: 0.7;
+  animation: loadingPulse 1.5s infinite;
+}
+
+@keyframes loadingPulse {
+  0%, 100% {
+    opacity: 0.7;
+  }
+  50% {
+    opacity: 1;
+  }
+}
