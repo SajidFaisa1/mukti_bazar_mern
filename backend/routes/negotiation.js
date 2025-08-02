@@ -1,5 +1,6 @@
 const express = require('express');
 const Negotiation = require('../models/Negotiation');
+const Notification = require('../models/Notification');
 const Product = require('../models/Product');
 const User = require('../models/User');
 const Vendor = require('../models/Vendor');
@@ -98,29 +99,43 @@ router.post('/', async (req, res) => {
       .populate('buyer', 'name email businessName')
       .populate('seller', 'businessName email storeId');
 
+    // Send notification to seller
+    try {
+      console.log('🔔 Creating negotiation notification for seller:', negotiation.sellerUid);
+      await Notification.createNegotiationNotification(
+        'new_negotiation',
+        populatedNegotiation,
+        buyerUid
+      );
+      console.log('✅ Negotiation notification created successfully');
+    } catch (notificationError) {
+      console.error('❌ Error sending notification:', notificationError);
+      // Don't fail the negotiation creation if notification fails
+    }
+
     // Send negotiation message to conversation if conversation exists
     if (conversationId) {
       try {
         const negotiationMessage = new Message({
           conversation: conversationId,
           content: `💰 New price negotiation started for ${product.name}`,
+          sender: buyer._id,
+          senderModel: buyerRole === 'vendor' ? 'Vendor' : 'User',
           senderUid: buyerUid,
           senderRole: buyerRole,
           senderName: buyerRole === 'vendor' ? buyer.businessName : buyer.name,
           messageType: 'negotiation',
-          negotiationContext: {
-            negotiationId: negotiation._id,
-            productName: product.name,
-            productImage: product.images?.[0],
-            proposedPrice: proposedPrice,
+          negotiationData: {
+            productId: product._id,
             originalPrice: originalPrice,
+            proposedPrice: proposedPrice,
             quantity: quantity,
-            totalAmount: proposedPrice * quantity
+            status: 'pending'
           },
           readBy: [{
             user: buyer._id,
             userModel: buyerRole === 'vendor' ? 'Vendor' : 'User',
-            timestamp: new Date()
+            readAt: new Date()
           }]
         });
 
@@ -178,6 +193,8 @@ router.get('/', async (req, res) => {
       if (status === 'active') {
         query.status = 'active';
         query.expiresAt = { $gt: new Date() };
+      } else if (status === 'completed') {
+        query.status = { $in: ['accepted', 'rejected'] };
       } else {
         query.status = status;
       }
@@ -287,6 +304,18 @@ router.post('/:id/counter-offer', async (req, res) => {
       .populate('buyer', 'name email businessName')
       .populate('seller', 'businessName email storeId');
 
+    // Send notification for counter offer
+    try {
+      await Notification.createNegotiationNotification(
+        'counter_offer',
+        updatedNegotiation,
+        fromUid,
+        { price, quantity }
+      );
+    } catch (notificationError) {
+      console.error('Error sending counter offer notification:', notificationError);
+    }
+
     // Send counter offer message to conversation
     if (negotiation.conversationId) {
       try {
@@ -297,24 +326,23 @@ router.post('/:id/counter-offer', async (req, res) => {
         const counterOfferMessage = new Message({
           conversation: negotiation.conversationId,
           content: `💰 Counter offer: ৳${price} × ${quantity} = ৳${price * quantity}`,
+          sender: user._id,
+          senderModel: fromRole === 'vendor' ? 'Vendor' : 'User',
           senderUid: fromUid,
           senderRole: fromRole,
           senderName: userName,
           messageType: 'negotiation',
-          negotiationContext: {
-            negotiationId: negotiation._id,
-            productName: negotiation.productName,
-            productImage: negotiation.productImage,
-            proposedPrice: price,
+          negotiationData: {
+            productId: negotiation.productId,
             originalPrice: negotiation.originalPrice,
+            proposedPrice: price,
             quantity: quantity,
-            totalAmount: price * quantity,
-            message: message
+            status: 'counter'
           },
           readBy: [{
             user: user._id,
             userModel: fromRole === 'vendor' ? 'Vendor' : 'User',
-            timestamp: new Date()
+            readAt: new Date()
           }]
         });
 
@@ -377,6 +405,17 @@ router.post('/:id/accept', async (req, res) => {
       .populate('buyer', 'name email businessName')
       .populate('seller', 'businessName email storeId');
 
+    // Send notification for accepted offer
+    try {
+      await Notification.createNegotiationNotification(
+        'offer_accepted',
+        updatedNegotiation,
+        uid
+      );
+    } catch (notificationError) {
+      console.error('Error sending acceptance notification:', notificationError);
+    }
+
     // Send acceptance message to conversation
     if (negotiation.conversationId) {
       try {
@@ -389,24 +428,23 @@ router.post('/:id/accept', async (req, res) => {
         const acceptanceMessage = new Message({
           conversation: negotiation.conversationId,
           content: `✅ Offer accepted! Final price: ৳${negotiation.finalPrice} × ${negotiation.finalQuantity} = ৳${negotiation.finalTotalAmount}`,
+          sender: acceptor._id,
+          senderModel: acceptorRole === 'vendor' ? 'Vendor' : 'User',
           senderUid: uid,
           senderRole: acceptorRole,
           senderName: acceptorName,
           messageType: 'negotiation',
-          negotiationContext: {
-            negotiationId: negotiation._id,
-            productName: negotiation.productName,
-            productImage: negotiation.productImage,
-            finalPrice: negotiation.finalPrice,
+          negotiationData: {
+            productId: negotiation.productId,
             originalPrice: negotiation.originalPrice,
+            proposedPrice: negotiation.finalPrice,
             quantity: negotiation.finalQuantity,
-            totalAmount: negotiation.finalTotalAmount,
             status: 'accepted'
           },
           readBy: [{
             user: acceptor._id,
             userModel: acceptorRole === 'vendor' ? 'Vendor' : 'User',
-            timestamp: new Date()
+            readAt: new Date()
           }]
         });
 
@@ -469,6 +507,17 @@ router.post('/:id/reject', async (req, res) => {
       .populate('buyer', 'name email businessName')
       .populate('seller', 'businessName email storeId');
 
+    // Send notification for rejected offer
+    try {
+      await Notification.createNegotiationNotification(
+        'offer_rejected',
+        updatedNegotiation,
+        uid
+      );
+    } catch (notificationError) {
+      console.error('Error sending rejection notification:', notificationError);
+    }
+
     // Send rejection message to conversation
     if (negotiation.conversationId) {
       try {
@@ -481,20 +530,23 @@ router.post('/:id/reject', async (req, res) => {
         const rejectionMessage = new Message({
           conversation: negotiation.conversationId,
           content: `❌ Offer rejected for ${negotiation.productName}`,
+          sender: rejector._id,
+          senderModel: rejectorRole === 'vendor' ? 'Vendor' : 'User',
           senderUid: uid,
           senderRole: rejectorRole,
           senderName: rejectorName,
           messageType: 'negotiation',
-          negotiationContext: {
-            negotiationId: negotiation._id,
-            productName: negotiation.productName,
-            productImage: negotiation.productImage,
+          negotiationData: {
+            productId: negotiation.productId,
+            originalPrice: negotiation.originalPrice,
+            proposedPrice: negotiation.finalPrice || negotiation.proposedPrice,
+            quantity: negotiation.finalQuantity || negotiation.quantity,
             status: 'rejected'
           },
           readBy: [{
             user: rejector._id,
             userModel: rejectorRole === 'vendor' ? 'Vendor' : 'User',
-            timestamp: new Date()
+            readAt: new Date()
           }]
         });
 

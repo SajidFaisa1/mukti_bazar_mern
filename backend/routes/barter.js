@@ -3,6 +3,7 @@ const router = express.Router();
 const Barter = require('../models/Barter');
 const Product = require('../models/Product');
 const Vendor = require('../models/Vendor');
+const Notification = require('../models/Notification');
 const { protect } = require('../middleware/auth');
 
 // Create a new barter offer
@@ -114,6 +115,26 @@ router.post('/offer', protect, async (req, res) => {
     const barter = await Barter.createBarterOffer(barterData);
     
     console.log('✅ Barter created successfully:', barter._id);
+
+    // Populate barter data for notification
+    const newOfferBarter = await Barter.findById(barter._id)
+      .populate('targetProduct')
+      .populate('proposingVendor', 'businessName')
+      .populate('targetVendor', 'businessName');
+
+    // Send notification to target vendor
+    try {
+      await Notification.createBarterNotification(
+        'new_barter_offer',
+        newOfferBarter,
+        vendor.uid
+      );
+      console.log('🔔 Barter notification sent successfully');
+    } catch (notificationError) {
+      console.error('❌ Error sending barter notification:', notificationError);
+      // Don't fail the barter creation if notification fails
+    }
+    
     console.log('📊 Barter details:', {
       id: barter._id,
       proposingVendor: barter.proposingVendorUid,
@@ -127,7 +148,7 @@ router.post('/offer', protect, async (req, res) => {
     console.log('🔍 Verification - Barter exists in DB:', !!savedBarter);
     
     // Populate the created barter with product details
-    const populatedBarter = await Barter.findById(barter._id)
+    const createdBarter = await Barter.findById(barter._id)
       .populate('targetProduct')
       .populate('offeredItems.product')
       .populate('proposingVendor', 'businessName email')
@@ -136,7 +157,7 @@ router.post('/offer', protect, async (req, res) => {
     res.json({
       success: true,
       message: 'Barter offer created successfully',
-      barter: populatedBarter
+      barter: createdBarter
     });
 
   } catch (error) {
@@ -387,16 +408,29 @@ router.put('/:barterId/accept', protect, async (req, res) => {
 
     await barter.acceptOffer(responseMessage);
 
-    const populatedBarter = await Barter.findById(barter._id)
+    const acceptedBarter = await Barter.findById(barter._id)
       .populate('targetProduct')
       .populate('offeredItems.product')
       .populate('proposingVendor', 'businessName email')
       .populate('targetVendor', 'businessName email');
 
+    // Send notification to proposing vendor
+    try {
+      await Notification.createBarterNotification(
+        'barter_accepted',
+        acceptedBarter,
+        vendor.uid
+      );
+      console.log('🔔 Barter acceptance notification sent successfully');
+    } catch (notificationError) {
+      console.error('❌ Error sending barter acceptance notification:', notificationError);
+      // Don't fail the acceptance if notification fails
+    }
+
     res.json({
       success: true,
       message: 'Barter offer accepted successfully',
-      barter: populatedBarter
+      barter: acceptedBarter
     });
 
   } catch (error) {
@@ -437,6 +471,25 @@ router.put('/:barterId/reject', protect, async (req, res) => {
     }
 
     await barter.rejectOffer(responseMessage);
+
+    // Populate barter data for notification
+    const rejectedBarter = await Barter.findById(barter._id)
+      .populate('targetProduct')
+      .populate('proposingVendor', 'businessName')
+      .populate('targetVendor', 'businessName');
+
+    // Send notification to proposing vendor  
+    try {
+      await Notification.createBarterNotification(
+        'barter_rejected',
+        rejectedBarter,
+        vendor.uid
+      );
+      console.log('🔔 Barter rejection notification sent successfully');
+    } catch (notificationError) {
+      console.error('❌ Error sending barter rejection notification:', notificationError);
+      // Don't fail the rejection if notification fails
+    }
 
     res.json({
       success: true,
@@ -508,17 +561,30 @@ router.put('/:barterId/counter', protect, async (req, res) => {
 
     await barter.createCounterOffer(counterOfferData);
 
-    const populatedBarter = await Barter.findById(barter._id)
+    const counteredBarter = await Barter.findById(barter._id)
       .populate('targetProduct')
       .populate('offeredItems.product')
       .populate('counterOffer.items.product')
       .populate('proposingVendor', 'businessName email')
       .populate('targetVendor', 'businessName email');
 
+    // Send notification to proposing vendor
+    try {
+      await Notification.createBarterNotification(
+        'barter_counter_offer',
+        counteredBarter,
+        vendor.uid
+      );
+      console.log('🔔 Barter counter offer notification sent successfully');
+    } catch (notificationError) {
+      console.error('❌ Error sending barter counter offer notification:', notificationError);
+      // Don't fail the counter offer if notification fails
+    }
+
     res.json({
       success: true,
       message: 'Counter offer created successfully',
-      barter: populatedBarter
+      barter: counteredBarter
     });
 
   } catch (error) {
