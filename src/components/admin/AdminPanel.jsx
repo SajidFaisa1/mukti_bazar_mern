@@ -1,60 +1,31 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { getAllDivision, getAllDistrict, getAllUnion } from 'bd-divisions-to-unions';
+import { useAdminAuth } from '../../contexts/AdminAuthContext';
+import VendorApproval from './VendorApproval';
 import './AdminPanel.css';
 
 const AdminPanel = () => {
-  const divisionMap = useMemo(() => {
-    const obj = {};
-    Object.values(getAllDivision('en')).forEach(d => { obj[d.value] = d.title; });
-    return obj;
-  }, []);
-  
-  const districtMap = useMemo(() => {
-    const obj = {};
-    const all = getAllDistrict('en');
-    Object.keys(all).forEach(divId => {
-      all[divId].forEach(dist => { obj[dist.value] = dist.title; });
-    });
-    return obj;
-  }, []);
-  
-  const unionMap = useMemo(() => {
-    const obj = {};
-    const all = getAllUnion('en');
-    Object.keys(all).forEach(upId => {
-      all[upId].forEach(un => { obj[un.value] = un.title; });
-    });
-    return obj;
-  }, []);
-
-  const formatAddress = (addr) => {
-    if (!addr) return null;
-    const parts = [];
-    if (addr.division && divisionMap[addr.division]) parts.push(divisionMap[addr.division]);
-    if (addr.district && districtMap[addr.district]) parts.push(districtMap[addr.district]);
-    if (addr.union && unionMap[addr.union]) parts.push(unionMap[addr.union]);
-    if (parts.length === 0) return null;
-    return <p><strong>Address:</strong> {parts.join(', ')}</p>;
-  };
+  const { token } = useAdminAuth(); // Get admin token
   
   const [activeTab, setActiveTab] = useState('approvals');
-  const [vendors, setVendors] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [products, setProducts] = useState([]);
   const [productError, setProductError] = useState('');
   const [loadingProducts, setLoadingProducts] = useState(true);
 
   useEffect(() => {
-    loadVendors();
-  }, []);
-  
-  useEffect(() => {
-    loadProducts();
-  }, []);
+    if (token) {
+      loadProducts();
+    }
+  }, [token]);
 
   const loadProducts = async () => {
     try {
-      const response = await fetch('http://localhost:5005/api/products?status=pending');
+      const response = await fetch('http://localhost:5005/api/products?status=pending', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       if (!response.ok) {
         throw new Error('Failed to fetch products');
       }
@@ -77,7 +48,12 @@ const AdminPanel = () => {
   
   const handleProductApprove = async (productId) => {
     try {
-      await fetch(`http://localhost:5005/api/products/approve/${productId}`, { method: 'PATCH' });
+      await fetch(`http://localhost:5005/api/products/approve/${productId}`, { 
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       loadProducts();
     } catch (error) {
       console.error('Error approving product:', error);
@@ -87,7 +63,10 @@ const AdminPanel = () => {
   const handleProductDecline = async (productId) => {
     try {
       await fetch(`http://localhost:5005/api/products/decline/${productId}`, {
-        method: 'POST'
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
       });
       loadProducts();
     } catch (error) {
@@ -193,118 +172,6 @@ const AdminPanel = () => {
     </div>
   );
 
-  const loadVendors = async () => {
-    try {
-      const response = await fetch('http://localhost:5005/api/vendors/pending');
-      if (!response.ok) {
-        throw new Error('Failed to load vendors');
-      }
-      const data = await response.json();
-      setVendors(data);
-    } catch (error) {
-      console.error('Error loading vendors:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleApprove = async (vendorId) => {
-    try {
-      await fetch(`http://localhost:5005/api/vendors/approve/${vendorId}`, { method: 'PATCH' });
-      loadVendors();
-    } catch (error) {
-      console.error('Error approving vendor:', error);
-    }
-  };
-
-  const handleDecline = async (vendorId) => {
-    try {
-      await fetch(`http://localhost:5005/api/vendors/${vendorId}`, {
-        method: 'DELETE'
-      });
-      loadVendors();
-    } catch (error) {
-      console.error('Error declining vendor:', error);
-    }
-  };
-
-  const VendorApprovals = () => (
-    <div className="vendor-approvals">
-      <h2>Pending Vendor Approvals</h2>
-      {loading ? (
-        <div className="loading">Loading...</div>
-      ) : vendors.length === 0 ? (
-        <div className="no-vendors">No pending vendor approvals</div>
-      ) : (
-        <div className="vendors-list">
-          {vendors.map(vendor => (
-            <div key={vendor.id} className="vendor-card">
-              <div className="vendor-info">
-                <h3>{vendor.businessName || vendor.sellerName || vendor.name}</h3>
-                <p><strong>Email:</strong> {vendor.email}</p>
-                <p><strong>Phone:</strong> {vendor.phone}</p>
-                <p><strong>Store ID:</strong> {vendor.storeId}</p>
-                {vendor.address && formatAddress(vendor.address)}
-                <div className="document-links">
-                  {(vendor.shopLogo?.url || vendor.shopLogo?.filename) && (
-                    <div className="document-preview">
-                      <h4>Shop Logo:</h4>
-                      <img 
-                        src={vendor.shopLogo?.url ?? `http://localhost:5005/uploads/${vendor.shopLogo.filename}`} 
-                        alt="Shop Logo" 
-                        style={{ width: '150px', height: '150px', objectFit: 'cover' }} 
-                      />
-                    </div>
-                  )}
-                  {(vendor.kycDocument?.url || vendor.kycDocument?.filename) && (
-                    <div className="document-preview">
-                      <h4>KYC Document:</h4>
-                      <a 
-                        href={vendor.kycDocument?.url ?? `http://localhost:5005/uploads/${vendor.kycDocument.filename}`} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="document-link"
-                      >
-                        View KYC Document
-                      </a>
-                    </div>
-                  )}
-                  {(vendor.farmingLicense?.url || vendor.farmingLicense?.filename) && (
-                    <div className="document-preview">
-                      <h4>Farming License:</h4>
-                      <a 
-                        href={vendor.farmingLicense?.url ?? `http://localhost:5005/uploads/${vendor.farmingLicense.filename}`} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="document-link"
-                      >
-                        View Farming License
-                      </a>
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div className="vendor-actions">
-                <button
-                  className="approve-btn"
-                  onClick={() => handleApprove(vendor.id)}
-                >
-                  Approve
-                </button>
-                <button
-                  className="decline-btn"
-                  onClick={() => handleDecline(vendor.id)}
-                >
-                  Decline
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-
   const Statistics = () => {
     const [stats, setStats] = useState({
       totalUsers: 0,
@@ -315,35 +182,53 @@ const AdminPanel = () => {
     });
 
     useEffect(() => {
+      if (!token) return;
+      
       const fetchStats = async () => {
         try {
           setStats(prev => ({ ...prev, loading: true }));
           
-          const vendorsRes = await fetch('http://localhost:5005/api/vendors');
+          const vendorsRes = await fetch('http://localhost:5005/api/vendors?admin=true', {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
           const allVendors = await vendorsRes.json();
           
-          const clientsRes = await fetch('http://localhost:5005/api/users');
-          const allClients = await clientsRes.json();
+          const clientsRes = await fetch('http://localhost:5005/api/users', {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          const allClients = await clientsRes.json();          // Ensure we have arrays
+          const vendorsArray = Array.isArray(allVendors) ? allVendors : [];
+          const clientsArray = Array.isArray(allClients) ? allClients : [];
           
-          const pendingVendors = allVendors.filter(v => !v.isApproved);
-          const approvedVendors = allVendors.filter(v => v.isApproved);
+          const pendingVendors = vendorsArray.filter(v => !v.isApproved);
+          const approvedVendors = vendorsArray.filter(v => v.isApproved);
           
           setStats({
-            totalUsers: allClients.length + allVendors.length,
+            totalUsers: clientsArray.length + vendorsArray.length,
             pendingApprovals: pendingVendors.length,
             activeVendors: approvedVendors.length,
-            totalClients: allClients.length,
+            totalClients: clientsArray.length,
             loading: false
           });
           
         } catch (error) {
           console.error('Error fetching statistics:', error);
-          setStats(prev => ({ ...prev, loading: false }));
+          setStats({
+            totalUsers: 0,
+            pendingApprovals: 0,
+            activeVendors: 0,
+            totalClients: 0,
+            loading: false
+          });
         }
       };
       
       fetchStats();
-    }, []);
+    }, [token]);
 
     if (stats.loading) {
       return <div className="loading">Loading statistics...</div>;
@@ -382,6 +267,17 @@ const AdminPanel = () => {
     <div className="admin-panel">
       <div className="admin-header">
         <h1>Admin Dashboard</h1>
+        
+        {/* Quick Actions */}
+        <div className="admin-quick-actions">
+          <Link to="/admin/fraud-panel" className="fraud-panel-link">
+            🛡️ Anti-Syndicate Fraud Panel
+          </Link>
+          <Link to="/admin/test-fraud" className="test-panel-link">
+            🧪 Test Fraud Detection
+          </Link>
+        </div>
+        
         <div className="tab-navigation">
           <button
             className={activeTab === 'approvals' ? 'active' : ''}
@@ -405,7 +301,7 @@ const AdminPanel = () => {
       </div>
       
       <div className="admin-content">
-        {activeTab === 'approvals' && <VendorApprovals />}
+        {activeTab === 'approvals' && <VendorApproval token={token} />}
         {activeTab === 'statistics' && <Statistics />}
         {activeTab === 'products' && <ProductApprovals />}
       </div>

@@ -16,6 +16,7 @@ import {
 import { useCart } from '../../contexts/CartContext';
 import { useClientAuth } from '../../contexts/ClientAuthContext';
 import { useVendorAuth } from '../../contexts/VendorAuthContext';
+import ClientDeviceFingerprint from '../../services/clientDeviceFingerprint';
 import './Checkout.css';
 
 const Checkout = () => {
@@ -123,13 +124,35 @@ const Checkout = () => {
     setCheckoutError('');
 
     try {
+      // 🛡️ Collect device fingerprint for fraud detection
+      console.log('Collecting device fingerprint for security analysis...');
+      const deviceFingerprint = await ClientDeviceFingerprint.collect();
+      
       const result = await checkout(
         checkoutData.paymentMethod,
         checkoutData.notes, 
-        checkoutData.specialInstructions
+        checkoutData.specialInstructions,
+        deviceFingerprint // Pass device fingerprint to backend
       );
       
       if (result.success) {
+        // Check if order requires admin approval
+        if (result.securityInfo?.requiresApproval) {
+          setCheckoutError('');
+          setOrderDetails({
+            ...result,
+            message: '🛡️ Your order has been submitted for security review. You will be notified once approved.'
+          });
+          setShowSuccess(true);
+          
+          // Redirect to orders page after showing security message
+          setTimeout(() => {
+            navigate('/orders');
+          }, 5000);
+          
+          return;
+        }
+        
         if (result.isOnlinePayment && result.gateway_url) {
           // For online payments, redirect to SSLCommerz
           window.location.href = result.gateway_url;
@@ -152,7 +175,14 @@ const Checkout = () => {
         }
       }
     } catch (error) {
-      setCheckoutError(error.message || 'Failed to process checkout');
+      console.error('Checkout error:', error);
+      
+      // Handle specific fraud-related errors
+      if (error.message?.includes('security review') || error.message?.includes('flagged')) {
+        setCheckoutError('Your order requires security review. Please contact support if you have questions.');
+      } else {
+        setCheckoutError(error.message || 'Failed to process checkout');
+      }
     } finally {
       setIsProcessing(false);
     }

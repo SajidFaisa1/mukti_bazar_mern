@@ -1,38 +1,38 @@
-/* Modal Overlay */
-.modal-overlay {
+/* ProductModal.css - Redesigned with unique class names */
+.product-modal-overlay {
   position: fixed;
-  top: 40px;
+  top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
+  background-color: rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
   display: flex;
   justify-content: center;
-  align-items: flex-start;
-  z-index: 1000;
-  padding: 60px 20px 40px; 
+  align-items: center;
+  z-index: 1500;
+  padding: 80px 20px 40px; 
   overflow-y: auto;
   animation: fadeIn 0.3s ease-out;
   -webkit-overflow-scrolling: touch;
 }
 
 /* Ensure modal is properly positioned and scrollable */
-.modal-overlay::-webkit-scrollbar {
+.product-modal-overlay::-webkit-scrollbar {
   width: 8px;
 }
 
-.modal-overlay::-webkit-scrollbar-track {
+.product-modal-overlay::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.modal-overlay::-webkit-scrollbar-thumb {
+.product-modal-overlay::-webkit-scrollbar-thumb {
   background: #888;
   border-radius: 4px;
 }
 
-.modal-overlay::-webkit-scrollbar-thumb:hover {
+.product-modal-overlay::-webkit-scrollbar-thumb:hover {
   background: #555;
 }
 
@@ -42,10 +42,10 @@
 }
 
 /* Mukti Logo in Modal */
-.mukti-logo-container {
+.product-mukti-logo-container {
   position: fixed;
   bottom: 2rem;
-  z-index: 1100; /* Higher than modal's z-index */
+  z-index: 1600; /* Higher than modal's z-index */
   max-width: 120px;
   max-height: 80px;
   
@@ -61,65 +61,59 @@
 
 /* Ensure logo is visible on top of modal overlay */
 
-
-.modal-content {
+.product-modal-content {
   position: relative;
-  
-  z-index: 1001;
+  z-index: 1601;
 }
 
-.mukti-logo {
+.product-mukti-logo {
   width: 100%;
   height: auto;
   max-height: 100%;
   object-fit: contain;
 }
 
-.mukti-logo-container:hover {
+.product-mukti-logo-container:hover {
   transform: translateY(-5px);
   box-shadow: 0 5px 20px rgba(0, 0, 0, 0.15);
 }
 
 /* Modal Content */
-.modal-content {
+.product-modal-content {
   background: white;
-  border-radius: 12px;
-  max-width: 900px;
-  width: 95%;
-  max-height: 80vh;
+  border-radius: 16px;
+  max-width: 700px;
+  width: 90%;
+  max-height: 75vh;
   min-height: auto;
-  overflow-y: auto;
+  overflow: hidden;
   position: relative;
-  box-shadow: 0 5px 30px rgba(0, 0, 0, 0.2);
-  animation: modalFadeIn 0.3s ease;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  animation: modalSlideIn 0.3s ease;
   margin: 20px 0;
   display: flex;
   flex-direction: column;
-  /* Ensure content doesn't get cut off at the top */
-  margin-top: 110px;
-  scroll-behavior: smooth;
-  -webkit-overflow-scrolling: touch;
 }
 
-@keyframes modalFadeIn {
+@keyframes modalSlideIn {
   from { 
     opacity: 0; 
-    transform: translateY(-20px); 
+    transform: translateY(-30px) scale(0.95); 
   }
   to { 
     opacity: 1; 
-    transform: translateY(0); 
+    transform: translateY(0) scale(1); 
   }
 }
 
-.close-button {
+.product-close-button {
   position: absolute;
-  top: 20px;
-  right: 20px;
+  top: 15px;
+  right: 15px;
   background: rgba(0, 0, 0, 0.8);
   border: 2px solid white;
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -128,49 +122,49 @@
   font-size: 1.2rem;
   color: white;
   transition: all 0.3s ease;
-  z-index: 1001;
+  z-index: 1602;
   margin: 0;
   transform: none;
 }
 
-.close-button:hover {
+.product-close-button:hover {
   background: #e74c3c;
-  transform: translateY(15px) scale(1.1);
+  transform: scale(1.1);
 }
 
 /* Modal Body */
-.modal-body {
+.product-modal-body {
   display: flex;
   flex-direction: row;
-  padding: 30px;
+  padding: 25px;
   position: relative;
   width: 100%;
-  gap: 30px;
-  min-height: 500px;
+  gap: 25px;
+  overflow-y: auto;
+  flex: 1;
 }
 
 /* Product Gallery */
 .product-gallery {
   flex: 1;
-  max-width: 400px;
+  max-width: 280px;
   display: flex;
   flex-direction: column;
   gap: 15px;
 }
 
 /* Product Details */
-.product-details {
+.product-info {
   flex: 1;
   display: flex;
   flex-direction: column;
-  
   gap: 20px;
   padding-left: 20px;
 }
 
-.main-image {
+.product-main-image {
   width: 100%;
-  height: 350px;
+  height: 300px;
   border-radius: 12px;
   overflow: hidden;
   background: #f8f8f8;
@@ -179,7 +173,7 @@
   margin-bottom: 10px;
 }
 
-.main-image img {
+.product-main-image img {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -187,7 +181,7 @@
   border-radius: 12px;
 }
 
-.discount-badge {
+.product-discount-badge {
   position: absolute;
   top: 15px;
   right: 15px;
@@ -201,7 +195,7 @@
   z-index: 2;
 }
 
-.thumbnail-container {
+.product-thumbnail-container {
   display: flex;
   gap: 10px;
   overflow-x: auto;
@@ -210,16 +204,16 @@
   scrollbar-color: #4CAF50 #f0f0f0;
 }
 
-.thumbnail-container::-webkit-scrollbar {
+.product-thumbnail-container::-webkit-scrollbar {
   height: 6px;
 }
 
-.thumbnail-container::-webkit-scrollbar-track {
+.product-thumbnail-container::-webkit-scrollbar-track {
   background: #f0f0f0;
   border-radius: 10px;
 }
 
-.thumbnail-container::-webkit-scrollbar-thumb {
+.product-thumbnail-container::-webkit-scrollbar-thumb {
   background-color: #4CAF50;
   border-radius: 10px;
 }
@@ -1253,34 +1247,69 @@
 
   .thumbnail {
     min-width: 50px;
-    height: 50px;
   }
-
+}
+/* Responsive Design for Product Modal */
+@media (max-width: 768px) {
+  .product-modal-overlay {
+    padding: 60px 15px 20px;
+    align-items: flex-start;
+  }
+  
+  .product-modal-content {
+    max-width: 100%;
+    width: 100%;
+    max-height: calc(100vh - 80px);
+    margin: 0;
+  }
+  
+  .product-modal-body {
+    flex-direction: column;
+    padding: 20px;
+    gap: 20px;
+  }
+  
+  .product-gallery {
+    max-width: 100%;
+    order: 1;
+  }
+  
+  .product-info {
+    padding-left: 0;
+    order: 2;
+  }
+  
+  .product-main-image {
+    height: 250px;
+  }
+  
+  .thumbnail {
+    min-width: 60px;
+    height: 60px;
+  }
+  
   .product-header h2 {
     font-size: 1.3rem;
   }
-
+  
   .price {
     font-size: 1.3rem;
   }
-
+  
   .quantity-controls button {
     width: 36px;
     height: 36px;
     font-size: 0.9rem;
   }
-
+  
   .quantity-controls span {
     min-width: 40px;
     font-size: 0.9rem;
   }
-
+  
   .add-to-cart-button, .wishlist-button, .barter-button, .contact-vendor-modal-btn, .negotiation-modal-btn {
     padding: 12px 16px;
     font-size: 0.9rem;
   }
 }
 
-.product-details{
-  align-items: normal;
-}

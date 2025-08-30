@@ -1,9 +1,21 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
+const { protect, adminOnly } = require('../middleware/auth');
 const router = express.Router();
 
-// POST /api/clients/signup – minimal client registration
+// GET /api/users - Get all users (admin only)
+router.get('/', protect, adminOnly, async (req, res) => {
+  try {
+    const users = await User.find().select('-password').sort({ createdAt: -1 });
+    res.json(users);
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    res.status(500).json({ error: 'Failed to fetch users' });
+  }
+});
+
+// POST /api/users/signup – minimal client registration
 router.post('/signup', async (req, res) => {
   try {
     const { firstName, lastName, email, password, confirmPassword, phone, uid } = req.body;

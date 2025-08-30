@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plant Disease Detection - TensorFlow.js Fallback</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .upload-area {
+            border: 2px dashed #ccc;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            margin: 20px 0;
+            cursor: pointer;
+            transition: border-color 0.3s;
+        }
+        .upload-area:hover {
+            border-color: #007bff;
+        }
+        .upload-area.dragover {
+            border-color: #007bff;
+            background-color: #f0f8ff;
+        }
+        .image-preview {
+            max-width: 300px;
+            max-height: 300px;
+            margin: 20px auto;
+            display: block;
+            border-radius: 10px;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        .result.success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .result.error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            color: #007bff;
+        }
+        .btn {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .btn:hover {
+            background-color: #0056b3;
+        }
+        .btn:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌱 Plant Disease Detection</h1>
+        <p>TensorFlow.js Browser-Based Detection (Fallback Solution)</p>
+        
+        <div class="upload-area" id="uploadArea">
+            <p>📁 Drop an image here or click to select</p>
+            <input type="file" id="imageInput" accept="image/*" style="display: none;">
+        </div>
+        
+        <img id="imagePreview" class="image-preview" style="display: none;">
+        
+        <div style="text-align: center;">
+            <button class="btn" id="predictBtn" style="display: none;" onclick="predictDisease()">
+                🔍 Detect Disease
+            </button>
+            <button class="btn" id="resetBtn" style="display: none;" onclick="resetDetection()">
+                🔄 Reset
+            </button>
+        </div>
+        
+        <div class="loading" id="loading">
+            <p>🧠 Loading AI model...</p>
+            <div style="margin: 10px;">Loading progress: <span id="loadingProgress">0%</span></div>
+        </div>
+        
+        <div id="result"></div>
+        
+        <div style="margin-top: 30px; padding: 15px; background-color: #fff3cd; border-radius: 5px;">
+            <h3>⚠️ Note</h3>
+            <p>This is a fallback browser-based solution. For better performance, set up the Python backend service.</p>
+            <p>To convert your H5 model to TensorFlow.js format, run:</p>
+            <code>tensorflowjs_converter --input_format=keras path/to/model.h5 path/to/web_model</code>
+        </div>
+    </div>
+
+    <script>
+        let model = null;
+        let currentImage = null;
+        
+        // Plant disease classes (same as Python version)
+        const CLASS_NAMES = [
+            'Apple___Apple_scab',
+            'Apple___Black_rot',
+            'Apple___Cedar_apple_rust',
+            'Apple___healthy',
+            'Blueberry___healthy',
+            'Cherry_(including_sour)___Powdery_mildew',
+            'Cherry_(including_sour)___healthy',
+            'Corn_(maize)___Cercospora_leaf_spot Gray_leaf_spot',
+            'Corn_(maize)___Common_rust_',
+            'Corn_(maize)___Northern_Leaf_Blight',
+            'Corn_(maize)___healthy',
+            'Grape___Black_rot',
+            'Grape___Esca_(Black_Measles)',
+            'Grape___Leaf_blight_(Isariopsis_Leaf_Spot)',
+            'Grape___healthy',
+            'Orange___Haunglongbing_(Citrus_greening)',
+            'Peach___Bacterial_spot',
+            'Peach___healthy',
+            'Pepper,_bell___Bacterial_spot',
+            'Pepper,_bell___healthy',
+            'Potato___Early_blight',
+            'Potato___Late_blight',
+            'Potato___healthy',
+            'Raspberry___healthy',
+            'Soybean___healthy',
+            'Squash___Powdery_mildew',
+            'Strawberry___Leaf_scorch',
+            'Strawberry___healthy',
+            'Tomato___Bacterial_spot',
+            'Tomato___Early_blight',
+            'Tomato___Late_blight',
+            'Tomato___Leaf_Mold',
+            'Tomato___Septoria_leaf_spot',
+            'Tomato___Spider_mites Two-spotted_spider_mite',
+            'Tomato___Target_Spot',
+            'Tomato___Tomato_Yellow_Leaf_Curl_Virus',
+            'Tomato___Tomato_mosaic_virus',
+            'Tomato___healthy'
+        ];
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            setupImageUpload();
+            // Note: You would need to convert your H5 model to TensorFlow.js format
+            // and load it here. For now, we'll show a demo.
+            showMessage('To use this browser version, convert your H5 model to TensorFlow.js format first.', 'error');
+        });
+        
+        function setupImageUpload() {
+            const uploadArea = document.getElementById('uploadArea');
+            const imageInput = document.getElementById('imageInput');
+            const imagePreview = document.getElementById('imagePreview');
+            
+            uploadArea.addEventListener('click', () => imageInput.click());
+            uploadArea.addEventListener('dragover', handleDragOver);
+            uploadArea.addEventListener('drop', handleDrop);
+            imageInput.addEventListener('change', handleImageSelect);
+        }
+        
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.currentTarget.classList.add('dragover');
+        }
+        
+        function handleDrop(e) {
+            e.preventDefault();
+            e.currentTarget.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                processImageFile(files[0]);
+            }
+        }
+        
+        function handleImageSelect(e) {
+            const file = e.target.files[0];
+            if (file) {
+                processImageFile(file);
+            }
+        }
+        
+        function processImageFile(file) {
+            if (!file.type.startsWith('image/')) {
+                showMessage('Please select an image file.', 'error');
+                return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const imagePreview = document.getElementById('imagePreview');
+                imagePreview.src = e.target.result;
+                imagePreview.style.display = 'block';
+                
+                document.getElementById('predictBtn').style.display = 'inline-block';
+                document.getElementById('resetBtn').style.display = 'inline-block';
+                
+                currentImage = e.target.result;
+                clearResult();
+            };
+            reader.readAsDataURL(file);
+        }
+        
+        async function predictDisease() {
+            if (!currentImage) {
+                showMessage('Please select an image first.', 'error');
+                return;
+            }
+            
+            // This is a demo - in reality you'd need the converted TensorFlow.js model
+            showMessage('Demo Mode: This would normally run your converted TensorFlow.js model. To enable:\n\n1. Convert your H5 model: tensorflowjs_converter --input_format=keras model.h5 ./web_model\n2. Load the model: model = await tf.loadLayersModel("./web_model/model.json")\n3. Process the image and make predictions', 'error');
+        }
+        
+        function resetDetection() {
+            document.getElementById('imagePreview').style.display = 'none';
+            document.getElementById('predictBtn').style.display = 'none';
+            document.getElementById('resetBtn').style.display = 'none';
+            document.getElementById('imageInput').value = '';
+            currentImage = null;
+            clearResult();
+        }
+        
+        function showMessage(message, type) {
+            const result = document.getElementById('result');
+            result.className = `result ${type}`;
+            result.innerHTML = `<pre>${message}</pre>`;
+        }
+        
+        function clearResult() {
+            document.getElementById('result').innerHTML = '';
+        }
+        
+        // Demo function showing how the actual prediction would work
+        async function demoPredict(imageElement) {
+            // This is what the actual implementation would look like:
+            
+            // 1. Preprocess image
+            const tensor = tf.browser.fromPixels(imageElement)
+                .resizeNearestNeighbor([224, 224])
+                .expandDims(0)
+                .div(255.0);
+            
+            // 2. Make prediction (if model was loaded)
+            // const predictions = await model.predict(tensor).data();
+            
+            // 3. Get top prediction
+            // const topPrediction = predictions.indexOf(Math.max(...predictions));
+            // const confidence = predictions[topPrediction];
+            // const className = CLASS_NAMES[topPrediction];
+            
+            // 4. Format result
+            // return {
+            //     plant: className.split('___')[0],
+            //     disease: className.split('___')[1],
+            //     confidence: confidence,
+            //     is_healthy: className.includes('healthy')
+            // };
+        }
+    </script>
+</body>
+</html>

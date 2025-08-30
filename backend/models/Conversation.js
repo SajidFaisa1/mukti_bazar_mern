@@ -26,6 +26,7 @@ const conversationSchema = new mongoose.Schema({
   title: { type: String }, // For group chats or custom titles
   description: { type: String }, // For group chats
   avatar: { type: String }, // Group avatar URL
+  groupId: { type: mongoose.Schema.Types.ObjectId, ref: 'Group' }, // Reference to group for group conversations
   
   // Last message info for quick display
   lastMessage: {

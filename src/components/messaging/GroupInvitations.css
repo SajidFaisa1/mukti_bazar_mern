@@ -1,0 +1,133 @@
+.group-invitations {
+  padding: 20px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.group-invitations h3 {
+  margin-bottom: 20px;
+  color: #333;
+  border-bottom: 2px solid #4CAF50;
+  padding-bottom: 10px;
+}
+
+.loading, .no-invitations {
+  text-align: center;
+  padding: 40px 20px;
+  color: #666;
+  font-style: italic;
+}
+
+.invitations-list {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.invitation-card {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 20px;
+  background: white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: box-shadow 0.2s;
+}
+
+.invitation-card:hover {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.invitation-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 15px;
+}
+
+.group-info h4 {
+  margin: 0 0 5px 0;
+  color: #333;
+  font-size: 18px;
+}
+
+.group-category {
+  margin: 0;
+  color: #666;
+  font-size: 14px;
+  text-transform: capitalize;
+  background: #f0f0f0;
+  padding: 2px 8px;
+  border-radius: 12px;
+  display: inline-block;
+}
+
+.invitation-date {
+  color: #999;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.invitation-body {
+  margin-bottom: 20px;
+}
+
+.invitation-message {
+  margin: 0 0 10px 0;
+  color: #333;
+}
+
+.group-description {
+  margin: 0;
+  color: #666;
+  font-size: 14px;
+  font-style: italic;
+}
+
+.invitation-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.btn-accept {
+  background-color: #4CAF50;
+  color: white;
+}
+
+.btn-accept:hover {
+  background-color: #45a049;
+}
+
+.btn-reject {
+  background-color: #f44336;
+  color: white;
+}
+
+.btn-reject:hover {
+  background-color: #da190b;
+}
+
+@media (max-width: 600px) {
+  .invitation-header {
+    flex-direction: column;
+    gap: 10px;
+  }
+  
+  .invitation-actions {
+    justify-content: stretch;
+  }
+  
+  .btn {
+    flex: 1;
+  }
+}

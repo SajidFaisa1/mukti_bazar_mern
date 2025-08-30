@@ -61,6 +61,70 @@
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
+/* Quick Actions */
+.admin-quick-actions {
+  margin-bottom: 1.5rem;
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.fraud-panel-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  background: linear-gradient(135deg, #dc2626, #b91c1c);
+  color: white;
+  text-decoration: none;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.875rem;
+  box-shadow: 0 4px 6px -1px rgba(220, 38, 38, 0.3);
+  transition: all 0.2s ease;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.fraud-panel-link:hover {
+  background: linear-gradient(135deg, #b91c1c, #991b1b);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 8px -1px rgba(220, 38, 38, 0.4);
+  color: white;
+  text-decoration: none;
+}
+
+.fraud-panel-link:active {
+  transform: translateY(0);
+}
+
+.test-panel-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  background: linear-gradient(135deg, #059669, #047857);
+  color: white;
+  text-decoration: none;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.875rem;
+  box-shadow: 0 4px 6px -1px rgba(5, 150, 105, 0.3);
+  transition: all 0.2s ease;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.test-panel-link:hover {
+  background: linear-gradient(135deg, #047857, #065f46);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 8px -1px rgba(5, 150, 105, 0.4);
+  color: white;
+  text-decoration: none;
+}
+
+.test-panel-link:active {
+  transform: translateY(0);
+}
+
 /* Section Headers */
 .vendor-approvals h2,
 .admin-statistics h2,

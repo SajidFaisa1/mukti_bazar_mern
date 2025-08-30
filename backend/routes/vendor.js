@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const cloudinary = require('../config/cloudinary');
 const Vendor = require('../models/Vendor');
+const { protect, adminOnly } = require('../middleware/auth');
 const { randomUUID } = require('crypto');
 const router = express.Router();
 
@@ -71,8 +72,44 @@ router.get('/uid/:uid', async (req, res) => {
 // GET /api/vendors/pending – list vendors awaiting approval
 router.get('/pending', async (_req, res) => {
   try {
-    const pending = await Vendor.find({ isApproved: false, profileCompleted: true });
-    res.json(pending.map(v => ({ id: v._id, businessName: v.businessName, email: v.email, storeId: v.storeId, phone:v.phone,address:v.address,shopLogo:v.shopLogo,farmingLicense:v.farmingLicense,kycDocument:v.kycDocument,isApproved:v.isApproved,profileCompleted:v.profileCompleted,role:v.role,isActive:v.isActive,emailVerified:v.emailVerified,createdAt:v.createdAt,updatedAt:v.updatedAt })));
+    const pending = await Vendor.find({ isApproved: false, isSubmitted: true });
+    res.json(pending.map(v => ({ 
+      id: v._id, 
+      businessName: v.businessName, 
+      sellerName: v.sellerName,
+      email: v.email, 
+      storeId: v.storeId, 
+      phone: v.phone,
+      address: v.address,
+      businessType: v.businessType,
+      yearsInBusiness: v.yearsInBusiness,
+      expectedMonthlyVolume: v.expectedMonthlyVolume,
+      primaryProducts: v.primaryProducts,
+      certifications: v.certifications,
+      description: v.description,
+      businessRegistrationNumber: v.businessRegistrationNumber,
+      taxIdentificationNumber: v.taxIdentificationNumber,
+      bankAccountDetails: v.bankAccountDetails,
+      socialMediaLinks: v.socialMediaLinks,
+      shopLogo: v.shopLogo,
+      farmingLicense: v.farmingLicense,
+      kycDocument: v.kycDocument,
+      isApproved: v.isApproved,
+      isSubmitted: v.isSubmitted,
+      profileCompleted: v.profileCompleted,
+      verificationStatus: v.verificationStatus,
+      verificationLevel: v.verificationLevel,
+      trustScore: v.trustScore,
+      securityInfo: v.securityInfo,
+      fraudFlags: v.fraudFlags,
+      requiresManualReview: v.requiresManualReview,
+      adminReviewNotes: v.adminReviewNotes,
+      role: v.role,
+      isActive: v.isActive,
+      emailVerified: v.emailVerified,
+      createdAt: v.createdAt,
+      updatedAt: v.updatedAt 
+    })));
   } catch (e) {
     res.status(500).json({ error: 'Failed to fetch' });
   }
@@ -170,6 +207,72 @@ router.patch('/approve/:id', async (req, res) => {
     res.json(vendor);
   } catch (e) {
     res.status(500).json({ error: 'Could not approve vendor' });
+  }
+});
+
+// GET /api/vendors?search=query - Search vendors for group invitations
+router.get('/', async (req, res) => {
+  try {
+    const { search, limit = 20, debug, admin } = req.query;
+    
+    // Admin mode - return all vendors as array
+    if (admin === 'true') {
+      const allVendors = await Vendor.find()
+        .select('-password')
+        .sort({ createdAt: -1 });
+      return res.json(allVendors);
+    }
+    
+    // Debug mode - return all vendors
+    if (debug === 'true') {
+      const allVendors = await Vendor.find({ isActive: true })
+        .select('uid businessName sellerName email isApproved address.city address.district')
+        .limit(10);
+      return res.json({ 
+        vendors: allVendors.map(vendor => ({
+          uid: vendor.uid,
+          businessName: vendor.businessName,
+          sellerName: vendor.sellerName,
+          email: vendor.email,
+          city: vendor.address?.city,
+          district: vendor.address?.district,
+          isApproved: vendor.isApproved
+        })),
+        debug: true
+      });
+    }
+    
+    if (!search || search.trim().length < 2) {
+      return res.json({ vendors: [] });
+    }
+    
+    const searchRegex = new RegExp(search.trim(), 'i');
+    
+    const vendors = await Vendor.find({
+      $or: [
+        { businessName: searchRegex },
+        { sellerName: searchRegex },
+        { email: searchRegex }
+      ],
+      isApproved: true, // Only approved vendors
+      isActive: true
+    })
+    .select('uid businessName sellerName email address.city address.district')
+    .limit(parseInt(limit));
+    
+    const formattedVendors = vendors.map(vendor => ({
+      uid: vendor.uid,
+      businessName: vendor.businessName,
+      sellerName: vendor.sellerName,
+      email: vendor.email,
+      city: vendor.address?.city,
+      district: vendor.address?.district
+    }));
+    
+    res.json({ vendors: formattedVendors });
+  } catch (error) {
+    console.error('Error searching vendors:', error);
+    res.status(500).json({ error: 'Failed to search vendors' });
   }
 });
 

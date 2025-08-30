@@ -1,52 +1,242 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const Admin = require('../models/Admin');
+const { protect, adminOnly } = require('../middleware/auth');
+const cloudinary = require('../config/cloudinary');
 const router = express.Router();
 
-// helper middleware to verify JWT sent in Authorization header
-const verifyToken = async (req, res, next) => {
-  const hdr = req.headers.authorization || '';
-  const token = hdr.startsWith('Bearer ') ? hdr.slice(7) : null;
-  if (!token) return res.status(401).json({ error: 'Missing token' });
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret');
-    const admin = await Admin.findById(decoded.id).select('-password');
-    if (!admin) return res.status(401).json({ error: 'Invalid token' });
-    req.admin = admin;
-    next();
-  } catch (err) {
-    return res.status(401).json({ error: 'Invalid token' });
+// Configure multer for logo uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = 'uploads/logos';
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueName = `logo-${Date.now()}${path.extname(file.originalname)}`;
+    cb(null, uniqueName);
   }
-};
+});
+
+const upload = multer({
+  storage: storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed'), false);
+    }
+  }
+});
 
 // POST /api/admin/login
-
 router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
-  console.log(email, password);
-  if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
-
   try {
+    const { email, password } = req.body;
+    console.log('Admin login attempt:', email);
+    
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password required' });
+    }
+
     const admin = await Admin.findOne({ email });
-    console.log(admin);
-    if (!admin) return res.status(401).json({ error: 'Invalid Email' });
+    console.log('Found admin:', admin ? 'Yes' : 'No');
+    
+    if (!admin) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
 
-    const ok = await admin.comparePassword(password);
-    if (!ok) return res.status(401).json({ error: 'Invalid Password' });
+    const isValid = await admin.comparePassword(password);
+    if (!isValid) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
 
-    const token = jwt.sign({ id: admin._id, role: 'admin' }, process.env.JWT_SECRET || 'secret', { expiresIn: '1d' });
+    const token = jwt.sign(
+      { id: admin._id, role: 'admin', email: admin.email }, 
+      process.env.JWT_SECRET || 'secret', 
+      { expiresIn: '24h' }
+    );
 
-    res.json({ token, admin: { id: admin._id, email: admin.email, role: 'admin' } });
+    res.json({ 
+      success: true,
+      token, 
+      admin: { 
+        id: admin._id, 
+        email: admin.email, 
+        role: 'admin' 
+      } 
+    });
   } catch (err) {
-    console.error(err);
+    console.error('Admin login error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
 // GET /api/admin/me – returns profile based on token
-router.get('/me', verifyToken, (req, res) => {
-  res.json({ admin: req.admin });
+router.get('/me', protect, adminOnly, (req, res) => {
+  res.json({ 
+    success: true,
+    admin: {
+      id: req.user.id,
+      email: req.user.email,
+      role: req.user.role
+    }
+  });
+});
+
+// POST /api/admin/create-first - Create first admin (only if no admins exist)
+router.post('/create-first', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+    
+    // Check if any admin already exists
+    const existingAdminCount = await Admin.countDocuments();
+    if (existingAdminCount > 0) {
+      return res.status(403).json({ error: 'Admin already exists. Use admin login.' });
+    }
+    
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 12);
+    
+    // Create first admin
+    const admin = new Admin({
+      email,
+      password: hashedPassword,
+      role: 'admin'
+    });
+    
+    await admin.save();
+    
+    // Generate token for immediate login
+    const token = jwt.sign(
+      { id: admin._id, role: 'admin', email: admin.email },
+      process.env.JWT_SECRET || 'secret',
+      { expiresIn: '24h' }
+    );
+    
+    res.status(201).json({
+      success: true,
+      message: 'First admin created successfully',
+      token,
+      admin: {
+        id: admin._id,
+        email: admin.email,
+        role: admin.role
+      }
+    });
+    
+  } catch (error) {
+    console.error('Create first admin error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET /api/admin/logo - Get current logo
+router.get('/logo', protect, adminOnly, async (req, res) => {
+  try {
+    // In a real app, you might store this in database
+    // For now, we'll check if custom logo exists in uploads/logos
+    const logoDir = 'uploads/logos';
+    const defaultLogo = '/src/assets/Mukti.png';
+    
+    if (!fs.existsSync(logoDir)) {
+      return res.json({ logoUrl: defaultLogo });
+    }
+    
+    const files = fs.readdirSync(logoDir);
+    const logoFiles = files.filter(file => file.startsWith('logo-')).sort();
+    
+    if (logoFiles.length === 0) {
+      return res.json({ logoUrl: defaultLogo });
+    }
+    
+    // Return the most recent logo
+    const latestLogo = logoFiles[logoFiles.length - 1];
+    res.json({ logoUrl: `http://localhost:5005/uploads/logos/${latestLogo}` });
+    
+  } catch (error) {
+    console.error('Error fetching logo:', error);
+    res.status(500).json({ error: 'Failed to fetch logo' });
+  }
+});
+
+// POST /api/admin/logo - Upload new logo
+router.post('/logo', protect, adminOnly, upload.single('logo'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No logo file provided' });
+    }
+
+    // Clean up old logo files (keep only the latest 3)
+    const logoDir = 'uploads/logos';
+    const files = fs.readdirSync(logoDir);
+    const logoFiles = files.filter(file => file.startsWith('logo-')).sort();
+    
+    if (logoFiles.length > 3) {
+      const filesToDelete = logoFiles.slice(0, logoFiles.length - 3);
+      filesToDelete.forEach(file => {
+        try {
+          fs.unlinkSync(path.join(logoDir, file));
+        } catch (err) {
+          console.error('Error deleting old logo:', err);
+        }
+      });
+    }
+
+    const logoUrl = `http://localhost:5005/uploads/logos/${req.file.filename}`;
+    
+    res.json({
+      success: true,
+      message: 'Logo uploaded successfully',
+      logoUrl: logoUrl
+    });
+    
+  } catch (error) {
+    console.error('Error uploading logo:', error);
+    res.status(500).json({ error: 'Failed to upload logo' });
+  }
+});
+
+// DELETE /api/admin/logo - Reset to default logo
+router.delete('/logo', protect, adminOnly, async (req, res) => {
+  try {
+    // Delete all custom logos
+    const logoDir = 'uploads/logos';
+    
+    if (fs.existsSync(logoDir)) {
+      const files = fs.readdirSync(logoDir);
+      const logoFiles = files.filter(file => file.startsWith('logo-'));
+      
+      logoFiles.forEach(file => {
+        try {
+          fs.unlinkSync(path.join(logoDir, file));
+        } catch (err) {
+          console.error('Error deleting logo:', err);
+        }
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Logo reset to default',
+      logoUrl: '/src/assets/Mukti.png'
+    });
+    
+  } catch (error) {
+    console.error('Error resetting logo:', error);
+    res.status(500).json({ error: 'Failed to reset logo' });
+  }
 });
 
 module.exports = router;

@@ -10,6 +10,7 @@ const http = require('http');
 const WebSocket = require('ws');
 const url = require('url');
 const autoExpiryService = require('./services/autoExpiryService');
+const groupSchedulerService = require('./services/groupSchedulerService');
 
 // Connect to MongoDB
 require('./config/db');
@@ -19,6 +20,9 @@ const vendorRoutes  = require('./routes/vendor');
 const userRoutes    = require('./routes/user');
 const authRoutes    = require('./routes/auth');
 const adminRoutes   = require('./routes/admin');
+const adminPanelRoutes = require('./routes/adminPanel');
+const fraudTestingRoutes = require('./routes/fraudTesting');
+const debugFraudRoutes = require('./routes/debugFraud');
 const productRoutes = require('./routes/products');
 const addressRoutes = require('./routes/address');
 const cartRoutes    = require('./routes/cart');
@@ -27,8 +31,12 @@ const paymentRoutes = require('./routes/payment');
 const barterRoutes  = require('./routes/barter');
 const messageRoutes = require('./routes/messages');
 const groupRoutes   = require('./routes/groups');
+const groupAnnouncementRoutes = require('./routes/groupAnnouncements');
+const aiChatRoutes = require('./routes/aiChat');
+const bulkMessageRoutes = require('./routes/bulkMessages');
 const negotiationRoutes = require('./routes/negotiation');
 const notificationRoutes = require('./routes/notification');
+const plantDiseaseRoutes = require('./routes/plantDisease');
 
 const app = express();
 const server = http.createServer(app);
@@ -47,19 +55,14 @@ wss.on('connection', (ws, req) => {
   const query = url.parse(req.url, true).query;
   const uid = query.uid;
   
-  console.log(`🔌 WebSocket connection attempt for user: ${uid}`);
-  
   if (!uid) {
-    console.log('❌ WebSocket connection rejected: No UID provided');
     ws.close(1008, 'UID required');
     return;
   }
   
-  console.log(`✅ Notification WebSocket connected for user: ${uid}`);
   global.notificationWS.set(uid, ws);
   
   ws.on('close', () => {
-    console.log(`Notification WebSocket disconnected for user: ${uid}`);
     global.notificationWS.delete(uid);
   });
   
@@ -84,8 +87,12 @@ app.use(cors());
 // Mount routers
 app.use('/api/vendors',  vendorRoutes);
 app.use('/api/clients',  userRoutes);
+app.use('/api/users',    userRoutes); // Additional mapping for admin panel
 app.use('/api/auth',     authRoutes);
 app.use('/api/admin',    adminRoutes);
+app.use('/api/admin-panel', adminPanelRoutes);
+app.use('/api/fraud-testing', fraudTestingRoutes);
+app.use('/api/debug-fraud', debugFraudRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/addresses', addressRoutes);
 app.use('/api/cart', cartRoutes);
@@ -94,8 +101,13 @@ app.use('/api/payment', paymentRoutes);
 app.use('/api/barter', barterRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/groups', groupRoutes);
+app.use('/api/groups', groupAnnouncementRoutes);
+app.use('/api/bulk-messages', bulkMessageRoutes);
 app.use('/api/negotiations', negotiationRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/plant-disease', plantDiseaseRoutes);
+app.use('/api/ai-chat', aiChatRoutes);
+app.use('/api/chat', aiChatRoutes);
 
 // Quick 410 for very old endpoints we deliberately removed
 ['/api/vendor/signup', '/api/client/signup'].forEach(path => {
@@ -114,4 +126,7 @@ server.listen(PORT, () => {
   
   // Start auto-expiry service
   autoExpiryService.start();
+  
+  // Start group scheduler service
+  groupSchedulerService.start();
 });

@@ -5,8 +5,9 @@ const Cart = require('../models/Cart');
 const User = require('../models/User');
 const Vendor = require('../models/Vendor');
 const { protect } = require('../middleware/auth');
+const DeviceFingerprintService = require('../services/deviceFingerprintService');
 
-// Create order from cart (checkout)
+// Create order from cart (checkout) with fraud detection
 router.post('/checkout', protect, async (req, res) => {
   try {
     const { paymentMethod, notes = '', specialInstructions = '' } = req.body;
@@ -101,29 +102,85 @@ router.post('/checkout', protect, async (req, res) => {
         deliveryFee: cart.deliveryFee
       };
 
-      // Create order for this vendor
-      const order = await Order.createFromCart(vendorCart, paymentMethod, notes, specialInstructions);
+      // 🛡️ Enhanced fraud detection with device fingerprinting
+      const { deviceFingerprint } = req.body; // Expecting device fingerprint from client
+      
+      const securityReport = await DeviceFingerprintService.generateSecurityReport(
+        req, 
+        deviceFingerprint || {}, 
+        uid
+      );
+
+      // Create order for this vendor with enhanced fraud detection
+      const { order, fraudFlags } = await Order.createFromCart(
+        vendorCart, 
+        paymentMethod, 
+        securityReport.securityInfo, 
+        notes, 
+        specialInstructions
+      );
+      
+      // Add additional fraud flags from device analysis
+      if (securityReport.fraudIndicators.length > 0) {
+        order.suspiciousFlags.push(...securityReport.fraudIndicators);
+        
+        // Require approval if high risk
+        if (securityReport.requiresReview) {
+          order.requiresApproval = true;
+          order.adminApproval.status = 'pending';
+        }
+        
+        await order.save();
+      }
+
       orders.push(order);
       orderNumbers.push(order.orderNumber);
       totalOrderValue += order.total;
+      
+      // Log comprehensive fraud analysis
+      if (fraudFlags.length > 0 || securityReport.fraudIndicators.length > 0) {
+        console.log(`🚨 Security Analysis for order ${order.orderNumber}:`);
+        console.log(`  - Risk Level: ${securityReport.riskLevel} (Score: ${securityReport.riskScore})`);
+        console.log(`  - Device Hash: ${securityReport.securityInfo.deviceFingerprint}`);
+        console.log(`  - IP: ${securityReport.securityInfo.ipAddress}`);
+        console.log(`  - Flags: ${[...fraudFlags, ...securityReport.fraudIndicators].map(f => f.type).join(', ')}`);
+        if (securityReport.deviceReuseAnalysis.deviceReused) {
+          console.log(`  - Device Reuse: ${securityReport.deviceReuseAnalysis.userCount} users, ${securityReport.deviceReuseAnalysis.ipCount} IPs`);
+        }
+      }
     }
 
     // Clear the cart after successful order creation
     await Cart.findByIdAndDelete(cart._id);
 
+    // Check if any orders require admin approval
+    const requiresApproval = orders.some(order => order.requiresApproval);
+    const totalFraudFlags = orders.reduce((total, order) => total + order.suspiciousFlags.length, 0);
+
     res.json({
       success: true,
-      message: 'Orders placed successfully',
+      message: requiresApproval 
+        ? 'Orders submitted for admin review due to security flags'
+        : 'Orders placed successfully',
       orderNumbers,
       orderIds: orders.map(o => o._id),
       totalOrders: orders.length,
       totalValue: totalOrderValue,
+      securityInfo: {
+        requiresApproval,
+        totalFraudFlags,
+        message: requiresApproval 
+          ? '🛡️ Your order has been flagged for security review. You will be notified once approved.'
+          : '✅ Order passed security checks'
+      },
       orders: orders.map(order => ({
         orderNumber: order.orderNumber,
         orderId: order._id,
         total: order.total,
         estimatedDelivery: order.estimatedDelivery,
-        vendor: order.vendor
+        vendor: order.vendor,
+        requiresApproval: order.requiresApproval,
+        suspiciousFlags: order.suspiciousFlags.length
       }))
     });
 

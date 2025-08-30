@@ -124,7 +124,10 @@ router.post('/init', protect, async (req, res) => {
       };
 
       // Create order for this vendor
-      const order = await Order.createFromCart(vendorCart, paymentMethod, notes, specialInstructions);
+      const { order, fraudFlags } = await Order.createFromCart(vendorCart, paymentMethod, {
+        ipAddress: req.ip || req.connection.remoteAddress || 'unknown',
+        userAgent: req.get('user-agent') || 'unknown'
+      }, notes, specialInstructions);
       orders.push(order);
       totalAmount += order.total;
 

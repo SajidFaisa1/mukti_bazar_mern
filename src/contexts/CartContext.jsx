@@ -202,7 +202,7 @@ export const CartProvider = ({ children }) => {
     }
   };
 
-  const checkout = async (paymentMethod, notes = '', specialInstructions = '') => {
+  const checkout = async (paymentMethod, notes = '', specialInstructions = '', deviceFingerprint = null) => {
     const uid = getCurrentUserUid();
     if (!uid) {
       throw new Error('User not found');
@@ -233,6 +233,14 @@ export const CartProvider = ({ children }) => {
       const onlinePaymentMethods = ['card', 'mobile-banking', 'bank-transfer'];
       const isOnlinePayment = onlinePaymentMethods.includes(paymentMethod);
 
+      // Prepare request body with device fingerprint for fraud detection
+      const requestBody = { 
+        paymentMethod, 
+        notes, 
+        specialInstructions,
+        deviceFingerprint 
+      };
+
       let response;
       
       if (isOnlinePayment) {
@@ -243,7 +251,7 @@ export const CartProvider = ({ children }) => {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
-          body: JSON.stringify({ paymentMethod, notes, specialInstructions })
+          body: JSON.stringify(requestBody)
         });
       } else {
         // Use regular checkout for COD
@@ -253,7 +261,7 @@ export const CartProvider = ({ children }) => {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
-          body: JSON.stringify({ paymentMethod, notes, specialInstructions })
+          body: JSON.stringify(requestBody)
         });
       }
 

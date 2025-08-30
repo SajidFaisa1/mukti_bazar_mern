@@ -9,7 +9,6 @@ class MessagingService {
   // Initialize WebSocket connection (for future real-time features)
   initializeSocket(uid) {
     // TODO: Implement Socket.IO connection
-    console.log('Socket connection initialized for:', uid);
   }
 
   // Conversation Management
@@ -329,7 +328,8 @@ class MessagingService {
       });
       
       if (!response.ok) {
-        throw new Error('Failed to leave group');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to leave group');
       }
       return await response.json();
     } catch (error) {
@@ -349,11 +349,160 @@ class MessagingService {
       });
       
       if (!response.ok) {
-        throw new Error('Failed to invite to group');
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('Invite API Error:', response.status, errorData);
+        throw new Error(errorData.error || `Failed to invite to group (${response.status})`);
       }
       return await response.json();
     } catch (error) {
       console.error('Error inviting to group:', error);
+      throw error;
+    }
+  }
+
+  // Group invitations
+  async getGroupInvitations(uid) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/groups/invitations?uid=${uid}`);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('Get invitations API Error:', response.status, errorData);
+        throw new Error(errorData.error || `Failed to fetch invitations (${response.status})`);
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching invitations:', error);
+      throw error;
+    }
+  }
+
+  async acceptGroupInvitation(invitationId, uid) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/groups/invitations/${invitationId}/accept`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ uid }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to accept invitation');
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('Error accepting invitation:', error);
+      throw error;
+    }
+  }
+
+  async rejectGroupInvitation(invitationId, uid) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/groups/invitations/${invitationId}/reject`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ uid }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to reject invitation');
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('Error rejecting invitation:', error);
+      throw error;
+    }
+  }
+
+  // Group member management
+  async updateMemberRole(groupId, memberId, newRole, adminUid) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/groups/${groupId}/members/${memberId}/role`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ newRole: newRole, uid: adminUid }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('Update role API Error:', response.status, errorData);
+        throw new Error(errorData.error || `Failed to update member role (${response.status})`);
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('Error updating member role:', error);
+      throw error;
+    }
+  }
+
+  async banGroupMember(groupId, memberId, adminUid, reason = '') {
+    try {
+      const response = await fetch(`${API_BASE_URL}/groups/${groupId}/members/${memberId}/ban`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ uid: adminUid, reason }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('Ban member API Error:', response.status, errorData);
+        throw new Error(errorData.error || `Failed to ban member (${response.status})`);
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('Error banning member:', error);
+      throw error;
+    }
+  }
+
+  async unbanGroupMember(groupId, memberId, adminUid) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/groups/${groupId}/members/${memberId}/unban`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ uid: adminUid }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('Unban member API Error:', response.status, errorData);
+        throw new Error(errorData.error || `Failed to unban member (${response.status})`);
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('Error unbanning member:', error);
+      throw error;
+    }
+  }
+
+  async removeGroupMember(groupId, adminUid, memberUid) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/groups/${groupId}/leave`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ uid: memberUid, adminAction: true, adminUid }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('Remove member API Error:', response.status, errorData);
+        throw new Error(errorData.error || `Failed to remove member (${response.status})`);
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('Error removing member:', error);
       throw error;
     }
   }

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import messagingService from '../../services/messagingService';
 import { useClientAuth } from '../../contexts/ClientAuthContext';
 import { useVendorAuth } from '../../contexts/VendorAuthContext';
+import GroupInvitations from './GroupInvitations';
 import '../../styles/Messaging.css';
 
 const MessagingInterface = ({ embedded = false, onClose = null }) => {
@@ -29,6 +30,22 @@ const MessagingInterface = ({ embedded = false, onClose = null }) => {
   const [userLastSeen, setUserLastSeen] = useState({});
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploadingFile, setUploadingFile] = useState(false);
+  const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
+  const [showMembersModal, setShowMembersModal] = useState(false);
+  const [showAddMembersModal, setShowAddMembersModal] = useState(false);
+  const [selectedGroup, setSelectedGroup] = useState(null);
+  const [groupMembers, setGroupMembers] = useState([]);
+  const [searchVendors, setSearchVendors] = useState([]);
+  const [vendorSearchTerm, setVendorSearchTerm] = useState('');
+  const [selectedVendors, setSelectedVendors] = useState([]);
+  const [groupForm, setGroupForm] = useState({
+    name: '',
+    description: '',
+    category: 'general',
+    isPrivate: false,
+    city: '',
+    district: ''
+  });
   
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -129,6 +146,17 @@ const MessagingInterface = ({ embedded = false, onClose = null }) => {
       return () => clearInterval(interval);
     }
   }, [selectedConversation]);
+
+  // Vendor search effect
+  useEffect(() => {
+    const delayedSearch = setTimeout(() => {
+      if (vendorSearchTerm) {
+        handleVendorSearch(vendorSearchTerm);
+      }
+    }, 300);
+
+    return () => clearTimeout(delayedSearch);
+  }, [vendorSearchTerm]);
 
   const scrollToBottom = () => {
     if (messagesEndRef.current) {
@@ -371,7 +399,6 @@ const MessagingInterface = ({ embedded = false, onClose = null }) => {
     if (!isTyping) {
       setIsTyping(true);
       // In a real app, you'd send typing indicator to other users via WebSocket
-      console.log('User started typing');
     }
     
     // Clear existing timeout
@@ -382,7 +409,6 @@ const MessagingInterface = ({ embedded = false, onClose = null }) => {
     // Set new timeout to stop typing indicator
     typingTimeoutRef.current = setTimeout(() => {
       setIsTyping(false);
-      console.log('User stopped typing');
     }, 2000);
   };
 
@@ -475,6 +501,249 @@ const MessagingInterface = ({ embedded = false, onClose = null }) => {
     }
   };
 
+  const handleCreateGroup = async (e) => {
+    e.preventDefault();
+    
+    if (!groupForm.name.trim()) {
+      alert('Group name is required');
+      return;
+    }
+    
+    try {
+      const groupData = {
+        ...groupForm,
+        creatorUid: currentUser.uid,
+        region: {
+          city: groupForm.city,
+          district: groupForm.district
+        }
+      };
+      
+      const newGroup = await messagingService.createGroup(groupData);
+      
+      // Add to local groups list
+      setGroups(prev => [newGroup, ...prev]);
+      
+      // Close modal and reset form
+      setShowCreateGroupModal(false);
+      setGroupForm({
+        name: '',
+        description: '',
+        category: 'general',
+        isPrivate: false,
+        city: '',
+        district: ''
+      });
+      
+      alert('Group created successfully! You can now start chatting.');
+      
+      // Refresh groups to get any server-side updates
+      loadGroups();
+      
+    } catch (error) {
+      console.error('Error creating group:', error);
+      alert('Failed to create group. Please try again.');
+    }
+  };
+
+  const handleShowMembers = async (conversationOrGroup) => {
+    try {
+      // Handle different cases:
+      // 1. Group object from Groups tab (has category field, use _id)
+      // 2. Conversation object (has type field, use groupId if available)
+      let groupId;
+      
+      if (conversationOrGroup.category) {
+        // This is a group object from the groups tab
+        groupId = conversationOrGroup._id;
+        setSelectedGroup(conversationOrGroup);
+      } else if (conversationOrGroup.type === 'group') {
+        // This is a group conversation object
+        if (conversationOrGroup.groupId) {
+          groupId = conversationOrGroup.groupId;
+          // Find the group object from the groups list
+          const group = groups.find(g => g._id === conversationOrGroup.groupId);
+          setSelectedGroup(group);
+        } else {
+          alert('This group conversation needs to be updated. Please try refreshing the page.');
+          return;
+        }
+      } else {
+        // Fallback
+        groupId = conversationOrGroup.groupId || conversationOrGroup._id;
+        setSelectedGroup(conversationOrGroup);
+      }
+      
+      const groupData = await messagingService.getGroup(groupId, currentUser.uid);
+      
+      setGroupMembers(groupData.members || []);
+      setShowMembersModal(true);
+    } catch (error) {
+      console.error('Error fetching group members:', error);
+      alert('Failed to load group members. Please try again.');
+    }
+  };
+
+  // Member management handlers
+  const handleUpdateMemberRole = async (member, newRole) => {
+    if (!currentUser || !selectedGroup) return;
+    
+    try {
+      await messagingService.updateMemberRole(
+        selectedGroup._id, 
+        member.vendor?._id || member._id, 
+        newRole, 
+        currentUser.uid
+      );
+      
+      alert(`Member role updated to ${newRole} successfully!`);
+      
+      // Refresh group data
+      loadGroups();
+      await handleShowMembers(selectedGroup);
+    } catch (error) {
+      console.error('Error updating member role:', error);
+      alert(`Failed to update member role: ${error.message}`);
+    }
+  };
+
+  const handleBanMember = async (member, reason = '') => {
+    if (!currentUser || !selectedGroup) return;
+    
+    if (!confirm(`Are you sure you want to ban ${member.businessName || member.vendor?.businessName}?`)) {
+      return;
+    }
+    
+    try {
+      await messagingService.banGroupMember(
+        selectedGroup._id, 
+        member._id || member.vendor?._id, 
+        currentUser.uid, 
+        reason
+      );
+      
+      alert('Member banned successfully!');
+      
+      // Refresh group data
+      loadGroups();
+      await handleShowMembers(selectedGroup);
+    } catch (error) {
+      console.error('Error banning member:', error);
+      alert(`Failed to ban member: ${error.message}`);
+    }
+  };
+
+  const handleRemoveMember = async (member) => {
+    if (!currentUser || !selectedGroup) return;
+    
+    if (!confirm(`Are you sure you want to remove ${member.businessName || member.vendor?.businessName} from the group?`)) {
+      return;
+    }
+    
+    try {
+      await messagingService.removeGroupMember(
+        selectedGroup._id, 
+        currentUser.uid, 
+        member.uid || member.vendor?.uid
+      );
+      
+      alert('Member removed successfully!');
+      
+      // Refresh group data
+      loadGroups();
+      await handleShowMembers(selectedGroup);
+    } catch (error) {
+      console.error('Error removing member:', error);
+      alert(`Failed to remove member: ${error.message}`);
+    }
+  };
+
+  // Check if current user is admin of the selected group
+  const isCurrentUserAdmin = () => {
+    if (!selectedGroup || !currentUser) return false;
+    
+    const currentUserMember = selectedGroup.members?.find(m => 
+      m.uid === currentUser.uid || m.vendor?.uid === currentUser.uid
+    );
+    
+    return currentUserMember?.role === 'admin' || 
+           currentUserMember?.permissions?.role === 'admin' ||
+           selectedGroup.createdBy?.uid === currentUser.uid;
+  };
+
+  const handleAddMembersClick = () => {
+    setShowMembersModal(false);
+    setShowAddMembersModal(true);
+    setVendorSearchTerm('');
+    setSearchVendors([]);
+    setSelectedVendors([]);
+  };
+
+  const handleVendorSearch = async (searchTerm) => {
+    if (!searchTerm.trim()) {
+      setSearchVendors([]);
+      return;
+    }
+
+    try {
+      // Use the same API base URL as messaging service
+      const API_BASE_URL = 'http://localhost:5005/api';
+      const response = await fetch(`${API_BASE_URL}/vendors?search=${encodeURIComponent(searchTerm)}&limit=20`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        setSearchVendors(data.vendors || []);
+      } else {
+        console.error('Vendor search failed:', response.status, response.statusText);
+        setSearchVendors([]);
+      }
+    } catch (error) {
+      console.error('Error searching vendors:', error);
+      setSearchVendors([]);
+    }
+  };
+
+  const handleInviteMembers = async () => {
+    if (selectedVendors.length === 0) {
+      alert('Please select at least one vendor to invite');
+      return;
+    }
+
+    const currentGroup = groups.find(g => g._id === (selectedConversation?.groupId || selectedConversation?._id));
+    if (!currentGroup) {
+      alert('No group selected');
+      return;
+    }
+
+    console.log('Inviting members:', {
+      groupId: currentGroup._id,
+      inviterUid: currentUser.uid,
+      selectedVendors: selectedVendors
+    });
+
+    try {
+      const invitePromises = selectedVendors.map(vendor => {
+        console.log('Inviting vendor:', { vendorUid: vendor.uid, groupId: currentGroup._id, inviterUid: currentUser.uid });
+        return messagingService.inviteToGroup(currentGroup._id, currentUser.uid, vendor.uid);
+      });
+
+      await Promise.all(invitePromises);
+      
+      alert(`Successfully invited ${selectedVendors.length} member(s) to the group!`);
+      
+      // Reset and close modal
+      setSelectedVendors([]);
+      setShowAddMembersModal(false);
+      
+      // Refresh group data
+      loadGroups();
+      
+    } catch (error) {
+      console.error('Error inviting members:', error);
+      alert('Failed to invite some members. Please try again.');
+    }
+  };
+
   const filterConversations = () => {
     if (!searchTerm) return conversations;
     
@@ -541,9 +810,6 @@ const MessagingInterface = ({ embedded = false, onClose = null }) => {
   };
 
   if (!currentUser) {
-    console.log('MessagingInterface - No current user found');
-    console.log('Vendor from VendorAuth:', vendor);
-    console.log('User from ClientAuth:', user);
     return (
       <div className="messaging-container">
         <div className="empty-chat">
@@ -554,9 +820,6 @@ const MessagingInterface = ({ embedded = false, onClose = null }) => {
       </div>
     );
   }
-
-  console.log('MessagingInterface - Current user:', currentUser);
-  console.log('MessagingInterface - Current role:', currentRole);
 
   return (
     <div className={`messaging-container ${embedded ? 'embedded' : ''}`}>
@@ -577,6 +840,12 @@ const MessagingInterface = ({ embedded = false, onClose = null }) => {
                 onClick={() => setActiveTab('groups')}
               >
                 Groups
+              </button>
+              <button
+                className={`tab-button ${activeTab === 'invitations' ? 'active' : ''}`}
+                onClick={() => setActiveTab('invitations')}
+              >
+                Invitations
               </button>
             </div>
           )}
@@ -644,30 +913,108 @@ const MessagingInterface = ({ embedded = false, onClose = null }) => {
                 </div>
               );
             })
-          ) : (
-            filterGroups().map(group => (
-              <div
-                key={group._id}
-                className={`conversation-item ${selectedConversation?._id === group.conversation?._id ? 'active' : ''}`}
-                onClick={(e) => group.conversation && handleConversationSelect(group.conversation, e)}
-              >
-                <div className="conversation-avatar">
-                  {getInitials(group.name)}
-                </div>
-                <div className="conversation-info">
-                  <div className="conversation-name">{group.name}</div>
-                  <div className="conversation-preview">
-                    {group.stats.activeMembers} members
-                  </div>
-                </div>
-                <div className="conversation-meta">
-                  <div className="conversation-time">
-                    {group.stats.lastActivity && formatMessageTime(group.stats.lastActivity)}
-                  </div>
+          ) : activeTab === 'groups' ? (
+            <div>
+              {/* Groups Header with Create Button */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 15px', borderBottom: '1px solid #e9ecef' }}>
+                <span style={{ color: '#6c757d', fontSize: '14px', fontWeight: '500' }}>Your Groups ({groups.length})</span>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    onClick={() => window.location.href = '/vendor/groups'}
+                    style={{
+                      padding: '6px 12px',
+                      backgroundColor: 'transparent',
+                      color: '#6c757d',
+                      border: '1px solid #e9ecef',
+                      borderRadius: '15px',
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      fontWeight: '500'
+                    }}
+                    title="Advanced group management"
+                  >
+                    Manage
+                  </button>
+                  <button
+                    onClick={() => setShowCreateGroupModal(true)}
+                    style={{
+                      padding: '6px 12px',
+                      backgroundColor: '#4CAF50',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '15px',
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      fontWeight: '500'
+                    }}
+                    title="Create new group"
+                  >
+                    + Create
+                  </button>
                 </div>
               </div>
-            ))
-          )}
+              
+              {/* Groups List */}
+              {groups.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px 20px', color: '#6c757d' }}>
+                  <div style={{ fontSize: '32px', marginBottom: '10px' }}>👥</div>
+                  <p style={{ fontSize: '14px', margin: 0 }}>No groups yet</p>
+                  <p style={{ fontSize: '12px', margin: '5px 0 0 0' }}>Create your first group!</p>
+                </div>
+              ) : (
+                filterGroups().map(group => (
+                  <div
+                    key={group._id}
+                    className={`conversation-item ${selectedConversation?._id === group.conversation?._id ? 'active' : ''}`}
+                  >
+                    <div 
+                      className="conversation-avatar"
+                      onClick={(e) => group.conversation && handleConversationSelect(group.conversation, e)}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      {getInitials(group.name)}
+                    </div>
+                    <div 
+                      className="conversation-info"
+                      onClick={(e) => group.conversation && handleConversationSelect(group.conversation, e)}
+                      style={{ cursor: 'pointer', flex: 1 }}
+                    >
+                      <div className="conversation-name">{group.name}</div>
+                      <div className="conversation-preview">
+                        {group.stats.activeMembers} members
+                      </div>
+                    </div>
+                    <div className="conversation-meta">
+                      <div className="conversation-time">
+                        {group.stats.lastActivity && formatMessageTime(group.stats.lastActivity)}
+                      </div>
+                      <button
+                        onClick={() => handleShowMembers(group)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          fontSize: '18px',
+                          cursor: 'pointer',
+                          color: '#6c757d',
+                          padding: '4px'
+                        }}
+                        title="Manage members"
+                      >
+                        👥
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          ) : activeTab === 'invitations' ? (
+            <GroupInvitations 
+              onInvitationUpdate={() => {
+                loadGroups();
+                loadConversations(false);
+              }}
+            />
+          ) : null}
         </div>
       </div>
       
@@ -727,9 +1074,31 @@ const MessagingInterface = ({ embedded = false, onClose = null }) => {
                 </div>
               </div>
               <div className="chat-actions">
-                <button className="action-button">📞</button>
-                <button className="action-button">📹</button>
-                <button className="action-button">ℹ️</button>
+                {selectedConversation.type === 'group' ? (
+                  <>
+                    <button 
+                      className="action-button" 
+                      onClick={() => handleShowMembers(selectedConversation)}
+                      title="View members"
+                    >
+                      �
+                    </button>
+                    <button 
+                      className="action-button" 
+                      onClick={handleAddMembersClick}
+                      title="Add members"
+                    >
+                      ➕
+                    </button>
+                    <button className="action-button" title="Group info">ℹ️</button>
+                  </>
+                ) : (
+                  <>
+                    <button className="action-button">�📞</button>
+                    <button className="action-button">📹</button>
+                    <button className="action-button">ℹ️</button>
+                  </>
+                )}
               </div>
             </div>
             
@@ -946,6 +1315,584 @@ const MessagingInterface = ({ embedded = false, onClose = null }) => {
             <p>Choose a conversation from the sidebar to start messaging.</p>
           </div>
         )}
+        </div>
+      )}
+      
+      {/* Group Creation Modal */}
+      {showCreateGroupModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: 'white',
+            padding: '25px',
+            borderRadius: '12px',
+            width: '90%',
+            maxWidth: '450px',
+            maxHeight: '80vh',
+            overflow: 'auto',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.2)'
+          }}>
+            <h2 style={{ margin: '0 0 20px 0', color: '#2d3436', fontSize: '20px' }}>Create New Group</h2>
+            
+            <form onSubmit={handleCreateGroup}>
+              <div style={{ marginBottom: '15px' }}>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500', fontSize: '14px' }}>
+                  Group Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={groupForm.name}
+                  onChange={(e) => setGroupForm(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="Enter group name..."
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    border: '1px solid #e9ecef',
+                    borderRadius: '6px',
+                    fontSize: '14px'
+                  }}
+                />
+              </div>
+              
+              <div style={{ marginBottom: '15px' }}>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500', fontSize: '14px' }}>
+                  Description
+                </label>
+                <textarea
+                  value={groupForm.description}
+                  onChange={(e) => setGroupForm(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="Brief description of the group..."
+                  rows={2}
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    border: '1px solid #e9ecef',
+                    borderRadius: '6px',
+                    resize: 'vertical',
+                    fontSize: '14px'
+                  }}
+                />
+              </div>
+              
+              <div style={{ marginBottom: '15px' }}>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500', fontSize: '14px' }}>
+                  Category
+                </label>
+                <select
+                  value={groupForm.category}
+                  onChange={(e) => setGroupForm(prev => ({ ...prev, category: e.target.value }))}
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    border: '1px solid #e9ecef',
+                    borderRadius: '6px',
+                    fontSize: '14px'
+                  }}
+                >
+                  <option value="general">General</option>
+                  <option value="regional">Regional</option>
+                  <option value="category-based">Category Based</option>
+                  <option value="business">Business</option>
+                </select>
+              </div>
+              
+              <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500', fontSize: '14px' }}>
+                    City
+                  </label>
+                  <input
+                    type="text"
+                    value={groupForm.city}
+                    onChange={(e) => setGroupForm(prev => ({ ...prev, city: e.target.value }))}
+                    placeholder="Your city..."
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: '1px solid #e9ecef',
+                      borderRadius: '6px',
+                      fontSize: '14px'
+                    }}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500', fontSize: '14px' }}>
+                    District
+                  </label>
+                  <input
+                    type="text"
+                    value={groupForm.district}
+                    onChange={(e) => setGroupForm(prev => ({ ...prev, district: e.target.value }))}
+                    placeholder="Your district..."
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: '1px solid #e9ecef',
+                      borderRadius: '6px',
+                      fontSize: '14px'
+                    }}
+                  />
+                </div>
+              </div>
+              
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px' }}>
+                  <input
+                    type="checkbox"
+                    checked={groupForm.isPrivate}
+                    onChange={(e) => setGroupForm(prev => ({ ...prev, isPrivate: e.target.checked }))}
+                  />
+                  <span>Make this group private</span>
+                </label>
+              </div>
+              
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowCreateGroupModal(false)}
+                  style={{
+                    padding: '10px 20px',
+                    border: '1px solid #e9ecef',
+                    background: 'white',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '14px'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  style={{
+                    padding: '10px 20px',
+                    backgroundColor: '#4CAF50',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontWeight: '500',
+                    fontSize: '14px'
+                  }}
+                >
+                  Create Group
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      
+      {/* Members Modal */}
+      {showMembersModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: 'white',
+            padding: '25px',
+            borderRadius: '12px',
+            width: '90%',
+            maxWidth: '500px',
+            maxHeight: '80vh',
+            overflow: 'auto',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.2)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h2 style={{ margin: 0, color: '#2d3436', fontSize: '20px' }}>Group Members</h2>
+              <button
+                onClick={() => setShowMembersModal(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '24px',
+                  cursor: 'pointer',
+                  color: '#6c757d'
+                }}
+              >
+                ×
+              </button>
+            </div>
+            
+            <div style={{ marginBottom: '20px' }}>
+              <button
+                onClick={handleAddMembersClick}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  backgroundColor: '#4CAF50',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  cursor: 'pointer'
+                }}
+              >
+                ➕ Add Members
+              </button>
+            </div>
+            
+            <div style={{ maxHeight: '300px', overflow: 'auto' }}>
+              {groupMembers.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '20px', color: '#6c757d' }}>
+                  <p>No members found</p>
+                </div>
+              ) : (
+                groupMembers.map((member, index) => {
+                  const isAdmin = isCurrentUserAdmin();
+                  const memberRole = member.permissions?.role || member.role || 'member';
+                  const isCurrentMember = member.uid === currentUser.uid || member.vendor?.uid === currentUser.uid;
+                  
+                  return (
+                    <div key={index} style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '12px',
+                      borderBottom: '1px solid #e9ecef',
+                      gap: '12px'
+                    }}>
+                      <div style={{
+                        width: '40px',
+                        height: '40px',
+                        borderRadius: '50%',
+                        background: '#4CAF50',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'white',
+                        fontWeight: '600',
+                        fontSize: '16px'
+                      }}>
+                        {(member.businessName || member.vendor?.businessName || 'V')[0].toUpperCase()}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: '500', fontSize: '16px' }}>
+                          {member.businessName || member.vendor?.businessName || 'Vendor'}
+                          {isCurrentMember && <span style={{ color: '#6c757d', fontSize: '14px' }}> (You)</span>}
+                        </div>
+                        <div style={{ fontSize: '14px', color: '#6c757d' }}>
+                          {memberRole} • 
+                          Joined {member.joinedAt ? new Date(member.joinedAt).toLocaleDateString() : 'Unknown'}
+                        </div>
+                      </div>
+                      
+                      {/* Role Badge */}
+                      <div style={{
+                        padding: '4px 8px',
+                        backgroundColor: memberRole === 'admin' ? '#ff6b6b' : memberRole === 'moderator' ? '#ffa500' : '#4CAF50',
+                        color: 'white',
+                        borderRadius: '12px',
+                        fontSize: '12px',
+                        fontWeight: '500'
+                      }}>
+                        {memberRole}
+                      </div>
+                      
+                      {/* Admin Actions */}
+                      {isAdmin && !isCurrentMember && (
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          {/* Role Change Dropdown */}
+                          <select
+                            onChange={(e) => {
+                              if (e.target.value && e.target.value !== memberRole) {
+                                handleUpdateMemberRole(member, e.target.value);
+                                e.target.value = memberRole; // Reset dropdown
+                              }
+                            }}
+                            style={{
+                              padding: '4px 8px',
+                              border: '1px solid #ddd',
+                              borderRadius: '4px',
+                              fontSize: '12px',
+                              cursor: 'pointer'
+                            }}
+                            defaultValue=""
+                          >
+                            <option value="" disabled>Change Role</option>
+                            {memberRole !== 'member' && <option value="member">Member</option>}
+                            {memberRole !== 'moderator' && <option value="moderator">Moderator</option>}
+                            {memberRole !== 'admin' && <option value="admin">Admin</option>}
+                          </select>
+                          
+                          {/* Ban Button */}
+                          {!member.isBanned && (
+                            <button
+                              onClick={() => handleBanMember(member)}
+                              style={{
+                                padding: '4px 8px',
+                                backgroundColor: '#ffa500',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                fontSize: '12px',
+                                cursor: 'pointer',
+                                fontWeight: '500'
+                              }}
+                            >
+                              Ban
+                            </button>
+                          )}
+                          
+                          {/* Remove Button */}
+                          <button
+                            onClick={() => handleRemoveMember(member)}
+                            style={{
+                              padding: '4px 8px',
+                              backgroundColor: '#ff6b6b',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              fontSize: '12px',
+                              cursor: 'pointer',
+                              fontWeight: '500'
+                            }}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Add Members Modal */}
+      {showAddMembersModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: 'white',
+            padding: '25px',
+            borderRadius: '12px',
+            width: '90%',
+            maxWidth: '500px',
+            maxHeight: '80vh',
+            overflow: 'auto',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.2)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h2 style={{ margin: 0, color: '#2d3436', fontSize: '20px' }}>Add Members</h2>
+              <button
+                onClick={() => setShowAddMembersModal(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '24px',
+                  cursor: 'pointer',
+                  color: '#6c757d'
+                }}
+              >
+                ×
+              </button>
+            </div>
+            
+            <div style={{ marginBottom: '20px' }}>
+              <input
+                type="text"
+                value={vendorSearchTerm}
+                onChange={(e) => setVendorSearchTerm(e.target.value)}
+                placeholder="Search vendors by name or business..."
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  border: '1px solid #e9ecef',
+                  borderRadius: '8px',
+                  fontSize: '14px'
+                }}
+              />
+            </div>
+            
+            {selectedVendors.length > 0 && (
+              <div style={{ marginBottom: '20px' }}>
+                <h4 style={{ margin: '0 0 10px 0', color: '#2d3436' }}>Selected ({selectedVendors.length})</h4>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {selectedVendors.map(vendor => (
+                    <div key={vendor.uid} style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '6px 12px',
+                      backgroundColor: '#e8f5e8',
+                      borderRadius: '15px',
+                      fontSize: '14px'
+                    }}>
+                      <span>{vendor.businessName}</span>
+                      <button
+                        onClick={() => setSelectedVendors(prev => prev.filter(v => v.uid !== vendor.uid))}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#666',
+                          cursor: 'pointer',
+                          fontSize: '16px',
+                          padding: '0'
+                        }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            <div style={{ maxHeight: '200px', overflow: 'auto', marginBottom: '20px' }}>
+              {searchVendors.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '20px', color: '#6c757d' }}>
+                  {vendorSearchTerm ? (
+                    <div>
+                      <p>No vendors found for "{vendorSearchTerm}"</p>
+                      <p style={{ fontSize: '12px' }}>Try searching for:</p>
+                      <ul style={{ fontSize: '12px', textAlign: 'left' }}>
+                        <li>Business name</li>
+                        <li>Seller name</li>
+                        <li>Email address</li>
+                      </ul>
+                      <button
+                        onClick={async () => {
+                          try {
+                            const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5005/api';
+                            const response = await fetch(`${API_BASE_URL}/vendors?debug=true`);
+                            const data = await response.json();
+                            console.log('All vendors (debug):', data);
+                            alert(`Found ${data.vendors?.length || 0} vendors in database. Check console for details.`);
+                          } catch (error) {
+                            console.error('Debug failed:', error);
+                          }
+                        }}
+                        style={{
+                          padding: '6px 12px',
+                          backgroundColor: '#6c757d',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          fontSize: '12px',
+                          cursor: 'pointer',
+                          marginTop: '10px'
+                        }}
+                      >
+                        Debug: Show all vendors
+                      </button>
+                    </div>
+                  ) : (
+                    'Start typing to search vendors'
+                  )}
+                </div>
+              ) : (
+                searchVendors.map(vendor => (
+                  <div key={vendor.uid} style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: '12px',
+                    borderBottom: '1px solid #e9ecef',
+                    gap: '12px',
+                    cursor: 'pointer',
+                    backgroundColor: selectedVendors.some(v => v.uid === vendor.uid) ? '#f0f8ff' : 'white'
+                  }}
+                  onClick={() => {
+                    if (selectedVendors.some(v => v.uid === vendor.uid)) {
+                      setSelectedVendors(prev => prev.filter(v => v.uid !== vendor.uid));
+                    } else {
+                      setSelectedVendors(prev => [...prev, vendor]);
+                    }
+                  }}
+                  >
+                    <div style={{
+                      width: '40px',
+                      height: '40px',
+                      borderRadius: '50%',
+                      background: '#4CAF50',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'white',
+                      fontWeight: '600',
+                      fontSize: '16px'
+                    }}>
+                      {vendor.businessName ? vendor.businessName[0].toUpperCase() : 'V'}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: '500', fontSize: '16px' }}>
+                        {vendor.businessName || 'Vendor'}
+                      </div>
+                      <div style={{ fontSize: '14px', color: '#6c757d' }}>
+                        {vendor.city && vendor.district ? `${vendor.city}, ${vendor.district}` : 'Location not specified'}
+                      </div>
+                    </div>
+                    {selectedVendors.some(v => v.uid === vendor.uid) && (
+                      <div style={{ color: '#4CAF50', fontSize: '20px' }}>✓</div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+            
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setShowAddMembersModal(false)}
+                style={{
+                  padding: '10px 20px',
+                  border: '1px solid #e9ecef',
+                  background: 'white',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '14px'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleInviteMembers}
+                disabled={selectedVendors.length === 0}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: selectedVendors.length > 0 ? '#4CAF50' : '#ccc',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: selectedVendors.length > 0 ? 'pointer' : 'not-allowed',
+                  fontWeight: '500',
+                  fontSize: '14px'
+                }}
+              >
+                Invite {selectedVendors.length > 0 ? `(${selectedVendors.length})` : ''}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

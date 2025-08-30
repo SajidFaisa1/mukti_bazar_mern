@@ -191,26 +191,26 @@ const ProductModal = ({ product, onClose }) => {
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={e => e.stopPropagation()}>
-        <div className="mukti-logo-container">
-          <img src={muktiLogo} alt="Mukti Logo" className="mukti-logo" />
+    <div className="product-modal-overlay" onClick={onClose}>
+      <div className="product-modal-content" onClick={e => e.stopPropagation()}>
+        <div className="product-mukti-logo-container">
+          <img src={muktiLogo} alt="Mukti Logo" className="product-mukti-logo" />
         </div>
-        <button className="close-button" onClick={onClose}>
+        <button className="product-close-button" onClick={onClose}>
           <FaTimes />
         </button>
         
-        <div className="modal-body">
+        <div className="product-modal-body">
           <div className="product-gallery">
-            <div className="main-image">
+            <div className="product-main-image">
               <img src={product.images?.[currentImage] || ''} alt={product.name} />
               {discountPercentage > 0 && (
-                <div className="discount-badge">
+                <div className="product-discount-badge">
                   {discountPercentage}% OFF
                 </div>
               )}
             </div>
-            <div className="thumbnail-container">
+            <div className="product-thumbnail-container">
               {product.images && product.images.map((image, index) => (
                 <div 
                   key={index} 
@@ -226,7 +226,7 @@ const ProductModal = ({ product, onClose }) => {
             </div>
           </div>
           
-          <div className="product-details">
+          <div className="product-info">
             <div className="product-header">
               <h2>{product.name}</h2>
               <div className="price">
