@@ -9,8 +9,22 @@ const path = require('path');
 class AIFarmingChatbot {
   constructor() {
     this.projectContext = this.loadProjectContext();
-    this.ollamaUrl = 'http://localhost:11434'; // Default Ollama URL
-    this.model = 'llama3.2:3b'; // Lightweight, fast model
+    // Allow override via environment variables
+    this.ollamaUrl = process.env.OLLAMA_HOST || 'http://localhost:11434';
+    // Prefer small fast model first; will auto‑verify (can be overridden by env)
+    this.modelCandidates = [
+      'llama3.1:3b',
+      'llama3.1:8b',
+      'mistral:7b',
+      'phi3:mini'
+    ];
+    this.model = this.modelCandidates[0];
+    const envModel = process.env.OLLAMA_MODEL;
+    if (envModel) {
+      this.model = envModel;
+      // Put env model at front of candidates list without duplication
+      this.modelCandidates = [envModel, ...this.modelCandidates.filter(m => m !== envModel)];
+    }
   }
 
   /**
@@ -46,11 +60,46 @@ class AIFarmingChatbot {
   }
 
   /**
+   * Ensure preferred model is available, fallback to others if not
+   */
+  async ensureModel() {
+    try {
+      const tagsRes = await fetch(`${this.ollamaUrl}/api/tags`);
+      if (!tagsRes.ok) return false;
+      const data = await tagsRes.json();
+      const available = (data.models || []).map(m => m.name);
+      if (!available.includes(this.model)) {
+        // Pick first candidate that exists
+        const found = this.modelCandidates.find(c => available.includes(c));
+        if (found) {
+          this.model = found;
+          return true;
+        }
+        // Attempt to pull preferred model (may stream chunks)
+        const pullRes = await fetch(`${this.ollamaUrl}/api/pull`, {
+          method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: this.model })
+        });
+        if (!pullRes.ok) return false;
+        return true;
+      }
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /**
    * Generate context-aware response using Ollama
    */
   async generateResponse(userMessage, userRole = 'client') {
     const systemPrompt = this.buildSystemPrompt(userRole);
-    
+    const modelReady = await this.ensureModel();
+    if (!modelReady) {
+      console.warn('Ollama model not ready; using fallback.');
+      return this.getRuleBasedResponse(userMessage, userRole);
+    }
     try {
       const response = await fetch(`${this.ollamaUrl}/api/generate`, {
         method: 'POST',
@@ -59,29 +108,19 @@ class AIFarmingChatbot {
           model: this.model,
           prompt: `${systemPrompt}\n\nUser: ${userMessage}\nAssistant:`,
           stream: false,
-          options: {
-            temperature: 0.7,
-            top_p: 0.9,
-            max_tokens: 500
-          }
+          options: { temperature: 0.7, top_p: 0.9, max_tokens: 500 }
         })
       });
-
       if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error(`Model '${this.model}' not found (404). Pull it: ollama pull ${this.model}`);
+        }
         throw new Error(`Ollama API error: ${response.status}`);
       }
-
       const data = await response.json();
-      return {
-        success: true,
-        response: data.response,
-        model: this.model,
-        tokens: data.eval_count || 0
-      };
-
+      return { success: true, response: data.response, model: this.model, tokens: data.eval_count || 0 };
     } catch (error) {
-      console.error('Ollama API error:', error);
-      // Fallback to rule-based responses
+      console.error('Ollama API error:', error.message || error);
       return this.getRuleBasedResponse(userMessage, userRole);
     }
   }

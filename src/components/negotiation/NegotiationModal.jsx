@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import negotiationService from '../../services/negotiationService';
-import './NegotiationModal.css';
+import NegotiationStatusBadge from './NegotiationStatusBadge';
+import VerificationNotice from '../common/VerificationNotice';
 
 const NegotiationModal = ({ 
   negotiation, 
@@ -164,285 +165,158 @@ const NegotiationModal = ({
   });
 
   return (
-    <div className="negotiation-overlay" onClick={onClose}>
-      <div className="negotiation-container" onClick={(e) => e.stopPropagation()}>
-        <div className="negotiation-header">
-          <h3 className="negotiation-title">Negotiation Details</h3>
-          <button className="negotiation-close-btn" onClick={onClose}>×</button>
+    <div className="fixed inset-0 z-50 flex items-start md:items-center justify-center bg-slate-900/40 backdrop-blur-sm p-3 overflow-y-auto" onClick={onClose}>
+      <div className="w-full max-w-5xl bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in duration-200" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/60">
+          <h3 className="text-base font-semibold text-slate-800 tracking-tight">Negotiation Details</h3>
+          <button onClick={onClose} className="h-8 w-8 inline-flex items-center justify-center rounded-md text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition">✕</button>
         </div>
 
-        <div className="negotiation-content">
-          <div className="negotiation-main">
-            {/* Product Info */}
-            <div className="product-info-card">
-              <div className="product-details">
-                <div className="product-img">
-                  <img 
-                    src={negotiation.productId?.images?.[0] || '/placeholder-product.jpg'} 
-                    alt={negotiation.productId?.name || 'Product'}
-                  />
-                </div>
-                <div className="product-meta">
-                  <h4 className="product-name">{negotiation.productId?.name || 'Unknown Product'}</h4>
-                  <p className="product-price">Original Price: ৳{originalPrice}</p>
-                  <p className="product-participant">
-                    {participantInfo.role === 'buyer' ? 'Buying from: ' : 'Selling to: '}
-                    {participantInfo.role === 'buyer' ? 
-                      (negotiation.seller?.businessName || 'Vendor') :
-                      (negotiation.buyer?.businessName || negotiation.buyer?.name || 'Buyer')}
-                  </p>
-                  <div className="negotiation-status">
-                    <span className="status-tag" style={{ backgroundColor: statusColor }}>
-                      {negotiationService.getStatusText(negotiation.status)}
-                    </span>
-                    {negotiation.status === 'active' && (
-                      <span className="time-left">{timeRemaining}</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
+        <div className="px-6 pt-4">
+          {/* Optional Verification Notice (pass status prop if available) */}
+          {currentUser?.verification?.status && ['required','pending','rejected'].includes(currentUser.verification.status) && (
+            <VerificationNotice
+              status={currentUser.verification.status}
+              onAction={() => window.location.href='/account/verification'}
+              onDetails={() => window.location.href='/account/verification'}
+            />
+          )}
+        </div>
 
-            {/* Offer History */}
-            <div className="offers-history">
-              <h4 className="offers-title">Offer History</h4>
-              <div className="offers-list">
-                {/* Original Product Listing */}
-                <div className="offer-entry initial-offer">
-                  <div className="offer-info">
-                    <div className="offer-header">
-                      <span className="offer-from">
-                        {negotiation.seller?.businessName || 'Vendor'}
-                      </span>
-                      <span className="offer-date">
-                        Original Listing
-                      </span>
-                    </div>
-                    <div className="offer-amounts">
-                      <span className="offer-unit">৳{originalPrice} × {negotiation.quantity}</span>
-                      <span className="offer-total">= ৳{(originalPrice * negotiation.quantity).toFixed(2)}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Initial Negotiation Offer */}
-                <div className="offer-entry">
-                  <div className="offer-info">
-                    <div className="offer-header">
-                      <span className="offer-from">
-                        {negotiation.buyerUid === currentUser.uid ? 'You' : 
-                         (negotiation.buyer?.businessName || negotiation.buyer?.name || 'Buyer')}
-                      </span>
-                      <span className="offer-date">
-                        {new Date(negotiation.createdAt).toLocaleDateString()}
-                      </span>
-                    </div>
-                    <div className="offer-amounts">
-                      <span className="offer-unit">
-                        ৳{negotiation.currentPrice || negotiation.proposedPrice || 0} × {negotiation.quantity || 0}
-                      </span>
-                      <span className="offer-total">
-                        = ৳{((negotiation.currentPrice || negotiation.proposedPrice || 0) * (negotiation.quantity || 0)).toFixed(2)}
-                      </span>
-                    </div>
-                    {negotiation.message && (
-                      <div className="offer-msg">{negotiation.message}</div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Counter Offers - Only show if they have valid data */}
-                {negotiation.offers && negotiation.offers.length > 0 && negotiation.offers
-                  .filter(offer => {
-                    // Filter out invalid offers
-                    return offer && 
-                           offer.price && 
-                           !isNaN(offer.price) && 
-                           offer.quantity && 
-                           !isNaN(offer.quantity) && 
-                           offer.fromUid && 
-                           offer.createdAt;
-                  })
-                  .map((offer, index) => (
-                    <div key={index} className="offer-entry">
-                      <div className="offer-info">
-                        <div className="offer-header">
-                          <span className="offer-from">
-                            {offer.fromUid === currentUser.uid ? 'You' : 
-                             (offer.fromUid === negotiation.buyerUid ? 
-                              (negotiation.buyer?.businessName || negotiation.buyer?.name || 'Buyer') :
-                              (negotiation.seller?.businessName || 'Vendor'))}
-                          </span>
-                          <span className="offer-date">
-                            {new Date(offer.createdAt).toLocaleDateString()}
-                          </span>
-                        </div>
-                        <div className="offer-amounts">
-                          <span className="offer-unit">৳{offer.price} × {offer.quantity}</span>
-                          <span className="offer-total">= ৳{(offer.price * offer.quantity).toFixed(2)}</span>
-                        </div>
-                        {offer.message && (
-                          <div className="offer-msg">{offer.message}</div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="negotiation-sidebar">
-            {/* Error Message */}
-            {error && (
-              <div className="error-alert">
-                {error}
-              </div>
-            )}
-
-            {/* Counter Offer Form */}
-            {canMakeCounterOffer && (
-              <div className="counter-offer-form">
-                <h4 className="form-title">Make Counter Offer</h4>
-                <div className="form-fields">
-                  <div className="input-group">
-                    <label className="input-label">Price (৳)</label>
-                    <input
-                      type="number"
-                      value={counterOffer.price}
-                      onChange={(e) => setCounterOffer(prev => ({ ...prev, price: e.target.value }))}
-                      min="1"
-                      step="0.01"
-                      className="form-input"
-                    />
-                  </div>
-                  
-                  <div className="input-group">
-                    <label className="input-label">
-                      Quantity (Min: {negotiation.productId?.minOrderQty || 1} {negotiation.productId?.unitType || 'unit'})
-                    </label>
-                    <input
-                      type="number"
-                      value={counterOffer.quantity}
-                      onChange={(e) => {
-                        const newQuantity = parseInt(e.target.value) || (negotiation.productId?.minOrderQty || 1);
-                        setCounterOffer(prev => ({ 
-                          ...prev, 
-                          quantity: Math.max(newQuantity, negotiation.productId?.minOrderQty || 1).toString()
-                        }));
-                      }}
-                      min={negotiation.productId?.minOrderQty || 1}
-                      className="form-input"
-                    />
-                  </div>
-                  
-                  <div className="input-group">
-                    <label className="input-label">Message (Optional)</label>
-                    <textarea
-                      value={counterOffer.message}
-                      onChange={(e) => setCounterOffer(prev => ({ ...prev, message: e.target.value }))}
-                      placeholder="Add a message to support your counter offer..."
-                      rows="4"
-                      maxLength="500"
-                      className="form-input form-textarea"
-                    />
-                    <div className="char-counter">{counterOffer.message.length}/500</div>
-                  </div>
-
-                  <div className="total-amount">
-                    <strong>Total: ৳{calculateTotal()}</strong>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* View Only Summary for non-counter offer cases */}
-            {!canMakeCounterOffer && (
-              <div className="negotiation-summary">
-                <h4 className="summary-title">Negotiation Summary</h4>
-                <div className="summary-list">
-                  <div className="summary-row">
-                    <span>Current Status:</span>
-                    <span className="status-tag" style={{ backgroundColor: statusColor }}>
-                      {negotiationService.getStatusText(negotiation.status)}
-                    </span>
-                  </div>
-                  <div className="summary-row">
-                    <span>Original Price:</span>
-                    <span>৳{originalPrice}</span>
-                  </div>
-                  {lastOffer && (
-                    <>
-                      <div className="summary-row">
-                        <span>Current Offer:</span>
-                        <span>৳{lastOffer.price}</span>
-                      </div>
-                      <div className="summary-row">
-                        <span>Quantity:</span>
-                        <span>{lastOffer.quantity} {negotiation.productId?.unitType || 'unit'}</span>
-                      </div>
-                      <div className="summary-row">
-                        <span>Total:</span>
-                        <span>৳{(lastOffer.price * lastOffer.quantity).toFixed(2)}</span>
-                      </div>
-                    </>
+        <div className="flex flex-col lg:flex-row gap-6 px-6 pb-6">
+          {/* Left: History */}
+          <div className="flex-1 min-w-[300px] space-y-5">
+            <div className="flex gap-4 rounded-xl border border-slate-200 p-4 bg-white shadow-sm">
+              <img src={negotiation.productId?.images?.[0] || '/placeholder-product.jpg'} alt={negotiation.productId?.name || 'Product'} className="w-20 h-20 object-cover rounded-lg border border-slate-200" />
+              <div className="flex flex-col gap-1 flex-1">
+                <h4 className="text-slate-800 font-semibold leading-snug">{negotiation.productId?.name || 'Unknown Product'}</h4>
+                <p className="text-xs text-slate-500">Original Price: <span className="text-slate-700 font-medium">৳{originalPrice}</span></p>
+                <p className="text-xs text-slate-500">{participantInfo.role === 'buyer' ? 'Buying from:' : 'Selling to:'} <span className="text-slate-700 font-medium">{participantInfo.role === 'buyer' ? (negotiation.seller?.businessName || 'Vendor') : (negotiation.buyer?.businessName || negotiation.buyer?.name || 'Buyer')}</span></p>
+                <div className="flex items-center gap-2 flex-wrap mt-1">
+                  <NegotiationStatusBadge status={negotiation.status} label={negotiationService.getStatusText(negotiation.status)} />
+                  {negotiation.status === 'active' && (
+                    <span className="text-[11px] font-medium text-slate-500">{timeRemaining}</span>
                   )}
                 </div>
               </div>
-            )}
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="text-sm font-semibold text-slate-700 tracking-wide">Offer History</h4>
+              <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1 custom-scroll">
+                {/* Original Listing */}
+                <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3 text-xs">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-semibold text-slate-700">{negotiation.seller?.businessName || 'Vendor'}</span>
+                    <span className="text-slate-500">Original Listing</span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 text-slate-600 font-medium">
+                    <span>৳{originalPrice} × {negotiation.quantity}</span>
+                    <span className="text-slate-800">= ৳{(originalPrice * negotiation.quantity).toFixed(2)}</span>
+                  </div>
+                </div>
+
+                {/* Initial Offer */}
+                <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-semibold text-slate-700">{negotiation.buyerUid === currentUser.uid ? 'You' : (negotiation.buyer?.businessName || negotiation.buyer?.name || 'Buyer')}</span>
+                    <span className="text-slate-500">{new Date(negotiation.createdAt).toLocaleDateString()}</span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 text-slate-600 font-medium">
+                    <span>৳{negotiation.currentPrice || negotiation.proposedPrice || 0} × {negotiation.quantity || 0}</span>
+                    <span className="text-slate-800">= ৳{((negotiation.currentPrice || negotiation.proposedPrice || 0) * (negotiation.quantity || 0)).toFixed(2)}</span>
+                  </div>
+                  {negotiation.message && <div className="mt-2 text-slate-600 leading-relaxed">{negotiation.message}</div>}
+                </div>
+
+                {/* Counter Offers */}
+                {negotiation.offers && negotiation.offers.length > 0 && negotiation.offers.filter(o => o && o.price && !isNaN(o.price) && o.quantity && !isNaN(o.quantity) && o.fromUid && o.createdAt).map((offer, idx) => (
+                  <div key={idx} className="rounded-lg border border-slate-200 bg-white p-3 text-xs">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-semibold text-slate-700">{offer.fromUid === currentUser.uid ? 'You' : (offer.fromUid === negotiation.buyerUid ? (negotiation.buyer?.businessName || negotiation.buyer?.name || 'Buyer') : (negotiation.seller?.businessName || 'Vendor'))}</span>
+                      <span className="text-slate-500">{new Date(offer.createdAt).toLocaleDateString()}</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 text-slate-600 font-medium">
+                      <span>৳{offer.price} × {offer.quantity}</span>
+                      <span className="text-slate-800">= ৳{(offer.price * offer.quantity).toFixed(2)}</span>
+                    </div>
+                    {offer.message && <div className="mt-2 text-slate-600 leading-relaxed">{offer.message}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
-        </div>
 
-        {/* Modal Footer */}
-        <div className="negotiation-footer">
-          <button
-            className="action-btn btn-secondary"
-            onClick={onClose}
-            disabled={loading}
-          >
-            Close
-          </button>
+          {/* Right: Form / Summary */}
+          <div className="w-full lg:w-80 flex flex-col gap-5">
+            {error && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700 font-medium">{error}</div>}
 
-          {negotiation.status === 'active' && (
-            <>
-              {canMakeCounterOffer && (
-                <button
-                  className={`action-btn btn-primary ${loading ? 'loading' : ''}`}
-                  onClick={handleCounterOffer}
-                  disabled={loading || !counterOffer.price || !counterOffer.quantity}
-                >
-                  {loading ? '' : 'Send Counter Offer'}
-                </button>
+            {canMakeCounterOffer ? (
+              <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-4">
+                <h4 className="text-sm font-semibold text-slate-700 mb-3">Make Counter Offer</h4>
+                <div className="space-y-4">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-slate-500">Price (৳)</label>
+                    <input type="number" value={counterOffer.price} onChange={(e)=>setCounterOffer(p=>({...p,price:e.target.value}))} min="1" step="0.01" className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-slate-500">Quantity (Min: {negotiation.productId?.minOrderQty || 1} {negotiation.productId?.unitType || 'unit'})</label>
+                    <input type="number" value={counterOffer.quantity} onChange={(e)=>{const nq=parseInt(e.target.value)|| (negotiation.productId?.minOrderQty||1);setCounterOffer(pr=>({...pr,quantity:Math.max(nq,negotiation.productId?.minOrderQty||1).toString()}));}} min={negotiation.productId?.minOrderQty||1} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-slate-500">Message (Optional)</label>
+                    <textarea value={counterOffer.message} onChange={(e)=>setCounterOffer(p=>({...p,message:e.target.value}))} placeholder="Add a message to support your counter offer..." rows={4} maxLength={500} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40 resize-none" />
+                    <div className="text-[10px] text-slate-400 text-right">{counterOffer.message.length}/500</div>
+                  </div>
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-[11px] font-medium text-slate-500">Total</span>
+                    <span className="text-sm font-semibold text-slate-800">৳{calculateTotal()}</span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-4 text-xs space-y-3">
+                <h4 className="text-sm font-semibold text-slate-700">Negotiation Summary</h4>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between"><span className="text-slate-500">Current Status</span><NegotiationStatusBadge status={negotiation.status} label={negotiationService.getStatusText(negotiation.status)} /></div>
+                  <div className="flex items-center justify-between"><span className="text-slate-500">Original Price</span><span className="font-medium text-slate-700">৳{originalPrice}</span></div>
+                  {lastOffer && (<>
+                    <div className="flex items-center justify-between"><span className="text-slate-500">Current Offer</span><span className="font-medium text-slate-700">৳{lastOffer.price}</span></div>
+                    <div className="flex items-center justify-between"><span className="text-slate-500">Quantity</span><span className="font-medium text-slate-700">{lastOffer.quantity} {negotiation.productId?.unitType || 'unit'}</span></div>
+                    <div className="flex items-center justify-between"><span className="text-slate-500">Total</span><span className="font-semibold text-slate-800">৳{(lastOffer.price * lastOffer.quantity).toFixed(2)}</span></div>
+                  </>)}
+                </div>
+              </div>
+            )}
+
+            {/* Footer action buttons */}
+            <div className="mt-auto flex flex-wrap gap-2 pt-2">
+              <button onClick={onClose} disabled={loading} className="inline-flex items-center justify-center rounded-md bg-slate-600 hover:bg-slate-700 text-white text-xs font-semibold px-4 py-2 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed">Close</button>
+              {negotiation.status === 'active' && (
+                <>
+                  {canMakeCounterOffer && (
+                    <button onClick={handleCounterOffer} disabled={loading || !counterOffer.price || !counterOffer.quantity} className="inline-flex items-center justify-center rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-4 py-2 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed">Send Counter Offer</button>
+                  )}
+                  {canAcceptOffer && (
+                    <button onClick={handleAccept} disabled={loading} className="inline-flex items-center justify-center rounded-md bg-green-600 hover:bg-green-700 text-white text-xs font-semibold px-3 py-2 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed">✓ Accept</button>
+                  )}
+                  {canRejectOffer && (
+                    <button onClick={handleReject} disabled={loading} className="inline-flex items-center justify-center rounded-md bg-red-600 hover:bg-red-700 text-white text-xs font-semibold px-3 py-2 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed">✗ Reject</button>
+                  )}
+                  <button onClick={handleCancel} disabled={loading} className="inline-flex items-center justify-center rounded-md border border-slate-300 bg-white hover:bg-slate-50 text-slate-600 text-xs font-semibold px-3 py-2 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed">Cancel</button>
+                </>
               )}
-
-              {canAcceptOffer && (
-                <button
-                  className={`action-btn btn-success ${loading ? 'loading' : ''}`}
-                  onClick={handleAccept}
-                  disabled={loading}
-                >
-                  {loading ? '' : '✓ Accept Offer'}
-                </button>
+              {negotiation.status === 'accepted' && negotiation.buyerUid === currentUser.uid && !negotiation.__ord && (
+                <>
+                  <button onClick={async()=>{ if(!confirm('Place COD order for this negotiated price?')) return; try{ setLoading(true); const result= await negotiationService.checkoutNegotiation(negotiation._id,{ paymentMethod:'cod' }); alert('COD order placed: '+ result.orderNumber);} catch(e){ setError(e.message||'Failed to place order'); } finally { setLoading(false);} }} disabled={loading} className="inline-flex items-center justify-center rounded-md bg-green-600 hover:bg-green-700 text-white text-xs font-semibold px-4 py-2 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed">Place COD Order</button>
+                  <button onClick={async()=>{ try{ setLoading(true); const result = await negotiationService.checkoutNegotiation(negotiation._id,{ paymentMethod:'card' }); if(result.gateway_url){ window.location.href=result.gateway_url;} else { setError('Failed to initiate payment'); } } catch(e){ setError(e.message||'Failed to start payment'); } finally { setLoading(false);} }} disabled={loading} className="inline-flex items-center justify-center rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-4 py-2 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed">Pay Online</button>
+                </>
               )}
-
-              {canRejectOffer && (
-                <button
-                  className={`action-btn btn-danger ${loading ? 'loading' : ''}`}
-                  onClick={handleReject}
-                  disabled={loading}
-                >
-                  {loading ? '' : '✗ Reject Offer'}
-                </button>
+              {negotiation.status === 'accepted' && negotiation.__ord && (
+                <span className="inline-flex items-center rounded-md bg-emerald-100 text-emerald-700 px-3 py-1 text-[10px] font-semibold border border-emerald-300">Order Created{negotiation.__ord.orderNumber ? ` #${negotiation.__ord.orderNumber}` : ''}</span>
               )}
-
-              <button
-                className={`action-btn btn-outline ${loading ? 'loading' : ''}`}
-                onClick={handleCancel}
-                disabled={loading}
-              >
-                {loading ? '' : 'Cancel Negotiation'}
-              </button>
-            </>
-          )}
+            </div>
+          </div>
         </div>
       </div>
     </div>

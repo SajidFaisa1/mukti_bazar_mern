@@ -3,6 +3,8 @@ import messagingService from '../../services/messagingService';
 import { useClientAuth } from '../../contexts/ClientAuthContext';
 import { useVendorAuth } from '../../contexts/VendorAuthContext';
 import GroupInvitations from './GroupInvitations';
+// Legacy stylesheet imported previously for classic styling. We keep it for now so
+// any unconverted utility classes (e.g. animations) still work. New design uses Tailwind.
 import '../../styles/Messaging.css';
 
 const MessagingInterface = ({ embedded = false, onClose = null }) => {
@@ -809,6 +811,22 @@ const MessagingInterface = ({ embedded = false, onClose = null }) => {
     return date.toLocaleDateString();
   };
 
+  // Some messages are arriving with a newline between every character ("h\ne\ny").
+  // Heuristic: if >60% of lines are single characters and average line length < 2, collapse them.
+  const normalizeMessageContent = (text) => {
+    if (!text || typeof text !== 'string') return text || '';
+    // Quick reject if no newline present
+    if (!text.includes('\n')) return text;
+    const lines = text.split(/\r?\n/);
+    if (lines.length < 3) return text; // short messages fine
+    const singleCharLines = lines.filter(l => l.length === 1).length;
+    const avgLen = lines.reduce((a, l) => a + l.length, 0) / lines.length;
+    if (singleCharLines / lines.length > 0.6 && avgLen < 2) {
+      return lines.join(''); // collapse artificial per-char newlines
+    }
+    return text;
+  };
+
   if (!currentUser) {
     return (
       <div className="messaging-container">
@@ -822,502 +840,254 @@ const MessagingInterface = ({ embedded = false, onClose = null }) => {
   }
 
   return (
-    <div className={`messaging-container ${embedded ? 'embedded' : ''}`}>
+    <div className={`w-full mx-auto max-w-7xl h-[calc(100vh-90px)] ${embedded ? 'rounded-md' : 'rounded-2xl'} flex border border-gray-200 shadow-sm bg-white/70 backdrop-blur-sm overflow-hidden`}>      
       {/* Sidebar */}
-      <div className="messaging-sidebar">
-        <div className={`sidebar-header ${backgroundLoading ? 'background-loading' : ''}`}>
-          <h2>Messages</h2>
+      <div className="w-80 h-full flex flex-col bg-gradient-to-b from-gray-50 to-white border-r border-gray-200">
+        <div className="px-5 pt-5 pb-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-800 tracking-tight">Messages</h2>
+            {backgroundLoading && <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />}
+          </div>
           {currentRole === 'vendor' && !embedded && (
-            <div className="messaging-tabs">
-              <button
-                className={`tab-button ${activeTab === 'conversations' ? 'active' : ''}`}
-                onClick={() => setActiveTab('conversations')}
-              >
-                Direct
-              </button>
-              <button
-                className={`tab-button ${activeTab === 'groups' ? 'active' : ''}`}
-                onClick={() => setActiveTab('groups')}
-              >
-                Groups
-              </button>
-              <button
-                className={`tab-button ${activeTab === 'invitations' ? 'active' : ''}`}
-                onClick={() => setActiveTab('invitations')}
-              >
-                Invitations
-              </button>
+            <div className="mt-4 inline-flex bg-gray-100 p-1 rounded-full text-sm font-medium">
+              {['conversations','groups','invitations'].map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-3 py-1 rounded-full transition-colors ${activeTab===tab ? 'bg-white shadow text-green-700' : 'text-gray-600 hover:text-gray-800'}`}
+                >
+                  {tab==='conversations'?'Direct':tab.charAt(0).toUpperCase()+tab.slice(1)}
+                </button>
+              ))}
             </div>
           )}
+          <div className="mt-4 relative group">
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e)=>setSearchTerm(e.target.value)}
+              placeholder="Search..."
+              className="w-full rounded-xl border border-gray-200 bg-white/60 focus:bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-green-500/40 transition shadow-sm"
+            />
+            <span className="pointer-events-none absolute right-3 top-2.5 text-gray-400 group-focus-within:text-green-500">🔍</span>
+          </div>
         </div>
-        
-        <div className="search-container">
-          <input
-            type="text"
-            className="search-input"
-            placeholder="Search conversations..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-        
-        <div className="conversations-list">
+        <div className="flex-1 overflow-y-auto thin-scroll px-3 pb-4 space-y-1" data-testid="conversation-list">
           {loading ? (
-            <div className="loading-conversations">Loading...</div>
+            <div className="flex items-center justify-center h-40 text-sm text-gray-500 animate-pulse">Loading conversations...</div>
           ) : activeTab === 'conversations' ? (
-            filterConversations().map(conversation => {
-              const otherParticipant = conversation.participants.find(p => p.uid !== currentUser.uid);
-              const title = getConversationTitle(conversation);
-              const hasUnread = conversation.unreadCount > 0;
-              
+            filterConversations().map(conv => {
+              const title = getConversationTitle(conv);
+              const hasUnread = conv.unreadCount > 0;
+              const active = selectedConversation?._id === conv._id;
+              const lastTs = conv.lastMessage?.timestamp && formatMessageTime(conv.lastMessage.timestamp);
+              const otherParticipant = conv.participants.find(p => p.uid !== currentUser.uid);
+              const status = otherParticipant ? getOnlineStatus(otherParticipant.uid) : null;
               return (
-                <div
-                  key={conversation._id}
-                  className={`conversation-item ${selectedConversation?._id === conversation._id ? 'active' : ''} ${hasUnread ? 'has-unread' : ''}`}
-                  onClick={(e) => handleConversationSelect(conversation, e)}
+                <button
+                  key={conv._id}
+                  onClick={(e)=>handleConversationSelect(conv,e)}
+                  className={`w-full text-left relative flex gap-3 p-3 rounded-xl transition shadow-sm ${active ? 'bg-green-600 text-white ring-1 ring-green-500 shadow-green-200/50' : 'bg-white/70 hover:bg-green-50 border border-transparent hover:border-green-200'} ${hasUnread && !active ? 'font-semibold' : 'font-normal'}`}
                 >
-                  <div className="conversation-avatar">
+                  <div className={`relative flex h-11 w-11 items-center justify-center rounded-xl text-sm font-semibold ${active ? 'bg-white/20' : 'bg-gradient-to-br from-green-500 to-emerald-600 text-white'}`}>
                     {getInitials(title)}
-                    {conversation.type !== 'group' && (() => {
-                      const otherParticipant = conversation.participants.find(p => p.uid !== currentUser.uid);
-                      if (otherParticipant) {
-                        const status = getOnlineStatus(otherParticipant.uid);
-                        return (
-                          <div className={`online-indicator small ${status.status}`}>
-                            {status.status === 'online' && <div className="pulse"></div>}
-                          </div>
-                        );
-                      }
-                      return null;
-                    })()}
-                  </div>
-                  <div className="conversation-info">
-                    <div className="conversation-name">{title}</div>
-                    {conversation.productContext?.productName && (
-                      <div className="conversation-product">
-                        📦 {conversation.productContext.productName}
-                      </div>
-                    )}
-                    <div className="conversation-preview">
-                      {conversation.lastMessage?.content || 'No messages yet'}
-                    </div>
-                  </div>
-                  <div className="conversation-meta">
-                    <div className="conversation-time">
-                      {conversation.lastMessage?.timestamp && formatMessageTime(conversation.lastMessage.timestamp)}
-                    </div>
-                    {conversation.unreadCount > 0 && (
-                      <div className="unread-count">{conversation.unreadCount}</div>
+                    {status && (
+                      <span className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 ${active? 'border-green-600':'border-white'} ${status.status==='online'?'bg-green-400':'bg-gray-300'} shadow`}></span>
                     )}
                   </div>
-                </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className={`truncate text-sm ${active ? 'text-white' : 'text-gray-800'}`}>{title}</span>
+                      {conv.productContext?.productName && (
+                        <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 text-[10px] font-medium">📦</span>
+                      )}
+                    </div>
+                    <div className={`mt-0.5 text-xs truncate ${active ? 'text-white/80' : 'text-gray-500 group-hover:text-gray-600'}`}>{conv.lastMessage?.content || 'No messages yet'}</div>
+                  </div>
+                  <div className="flex flex-col items-end justify-between">
+                    {lastTs && <span className={`text-[10px] uppercase tracking-wide ${active?'text-white/60':'text-gray-400'}`}>{lastTs}</span>}
+                    {hasUnread && (
+                      <span className={`mt-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold ${active?'bg-white text-green-700':'bg-green-600 text-white shadow'}`}>{conv.unreadCount}</span>
+                    )}
+                  </div>
+                </button>
               );
             })
           ) : activeTab === 'groups' ? (
-            <div>
-              {/* Groups Header with Create Button */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 15px', borderBottom: '1px solid #e9ecef' }}>
-                <span style={{ color: '#6c757d', fontSize: '14px', fontWeight: '500' }}>Your Groups ({groups.length})</span>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button
-                    onClick={() => window.location.href = '/vendor/groups'}
-                    style={{
-                      padding: '6px 12px',
-                      backgroundColor: 'transparent',
-                      color: '#6c757d',
-                      border: '1px solid #e9ecef',
-                      borderRadius: '15px',
-                      fontSize: '12px',
-                      cursor: 'pointer',
-                      fontWeight: '500'
-                    }}
-                    title="Advanced group management"
-                  >
-                    Manage
-                  </button>
-                  <button
-                    onClick={() => setShowCreateGroupModal(true)}
-                    style={{
-                      padding: '6px 12px',
-                      backgroundColor: '#4CAF50',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '15px',
-                      fontSize: '12px',
-                      cursor: 'pointer',
-                      fontWeight: '500'
-                    }}
-                    title="Create new group"
-                  >
-                    + Create
-                  </button>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between px-1 pb-1 text-xs text-gray-500">
+                <span>Your Groups ({groups.length})</span>
+                <div className="flex gap-1.5">
+                  <button onClick={()=>window.location.href='/vendor/groups'} className="px-2 py-1 rounded-md border text-[11px] font-medium text-gray-600 hover:bg-gray-50">Manage</button>
+                  <button onClick={()=>setShowCreateGroupModal(true)} className="px-2 py-1 rounded-md bg-green-600 text-white text-[11px] font-medium hover:bg-green-700 shadow">+ Create</button>
                 </div>
               </div>
-              
-              {/* Groups List */}
-              {groups.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '40px 20px', color: '#6c757d' }}>
-                  <div style={{ fontSize: '32px', marginBottom: '10px' }}>👥</div>
-                  <p style={{ fontSize: '14px', margin: 0 }}>No groups yet</p>
-                  <p style={{ fontSize: '12px', margin: '5px 0 0 0' }}>Create your first group!</p>
+              {groups.length===0 ? (
+                <div className="text-center text-xs text-gray-500 py-10">
+                  <div className="text-3xl mb-1">👥</div>
+                  <p>No groups yet</p>
+                  <p className="text-[11px] mt-1 text-gray-400">Create your first group!</p>
                 </div>
               ) : (
-                filterGroups().map(group => (
-                  <div
-                    key={group._id}
-                    className={`conversation-item ${selectedConversation?._id === group.conversation?._id ? 'active' : ''}`}
-                  >
-                    <div 
-                      className="conversation-avatar"
-                      onClick={(e) => group.conversation && handleConversationSelect(group.conversation, e)}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      {getInitials(group.name)}
-                    </div>
-                    <div 
-                      className="conversation-info"
-                      onClick={(e) => group.conversation && handleConversationSelect(group.conversation, e)}
-                      style={{ cursor: 'pointer', flex: 1 }}
-                    >
-                      <div className="conversation-name">{group.name}</div>
-                      <div className="conversation-preview">
-                        {group.stats.activeMembers} members
+                filterGroups().map(group => {
+                  const active = selectedConversation?._id === group.conversation?._id;
+                  return (
+                    <div key={group._id} className={`p-3 rounded-xl flex gap-3 items-center cursor-pointer transition ${active?'bg-green-600 text-white':'bg-white/70 hover:bg-green-50'}`}
+                         onClick={(e)=>group.conversation && handleConversationSelect(group.conversation,e)}>
+                      <div className={`h-10 w-10 flex items-center justify-center rounded-xl text-xs font-semibold ${active?'bg-white/20':'bg-gradient-to-br from-indigo-500 to-violet-600 text-white'}`}>{getInitials(group.name)}</div>
+                      <div className="flex-1 min-w-0">
+                        <div className={`text-sm truncate ${active?'text-white':'text-gray-800'}`}>{group.name}</div>
+                        <div className={`text-xs ${active?'text-white/70':'text-gray-500'}`}>{group.stats.activeMembers} members</div>
                       </div>
+                      <button onClick={(e)=>{e.stopPropagation();handleShowMembers(group);}} className={`text-lg ${active?'text-white/80 hover:text-white':'text-gray-400 hover:text-gray-600'} transition`}>👥</button>
                     </div>
-                    <div className="conversation-meta">
-                      <div className="conversation-time">
-                        {group.stats.lastActivity && formatMessageTime(group.stats.lastActivity)}
-                      </div>
-                      <button
-                        onClick={() => handleShowMembers(group)}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          fontSize: '18px',
-                          cursor: 'pointer',
-                          color: '#6c757d',
-                          padding: '4px'
-                        }}
-                        title="Manage members"
-                      >
-                        👥
-                      </button>
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           ) : activeTab === 'invitations' ? (
-            <GroupInvitations 
-              onInvitationUpdate={() => {
-                loadGroups();
-                loadConversations(false);
-              }}
-            />
+            <GroupInvitations onInvitationUpdate={()=>{loadGroups();loadConversations(false);}} />
           ) : null}
         </div>
       </div>
-      
-      {/* Chat Area - Hidden in embedded mode */}
+
+      {/* Chat Area */}
       {!embedded && (
-        <div className="chat-container">{selectedConversation ? (
-          <>
-            {/* Chat Header */}
-            <div className="chat-header">
-              <div className="chat-header-info">
-                <div className="chat-avatar">
-                  {getInitials(getConversationTitle(selectedConversation))}
-                  {selectedConversation.type !== 'group' && (() => {
-                    const otherParticipant = selectedConversation.participants.find(p => p.uid !== currentUser.uid);
-                    if (otherParticipant) {
-                      const status = getOnlineStatus(otherParticipant.uid);
-                      return (
-                        <div className={`online-indicator ${status.status}`}>
-                          {status.status === 'online' && <div className="pulse"></div>}
-                        </div>
-                      );
-                    }
-                    return null;
-                  })()}
+        <div className="flex-1 flex flex-col h-full bg-gradient-to-br from-white via-white to-green-50/50 relative">
+          {selectedConversation ? (
+            <>
+              {/* Header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200/80 bg-white/80 backdrop-blur sticky top-0 z-10">
+                <div className="flex items-center gap-4 min-w-0">
+                  <div className="relative h-12 w-12 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 text-white flex items-center justify-center font-semibold shadow-sm">
+                    {getInitials(getConversationTitle(selectedConversation))}
+                    {selectedConversation.type !== 'group' && (()=>{ const other = selectedConversation.participants.find(p=>p.uid!==currentUser.uid); if(other){ const s = getOnlineStatus(other.uid); return <span className={`absolute -bottom-1 -right-1 h-4 w-4 rounded-full border-2 border-white ${s.status==='online'?'bg-green-400':'bg-gray-300'}`}></span>; } return null; })()}
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-base font-semibold text-gray-800 truncate">{getConversationTitle(selectedConversation)}</h3>
+                    <div className="text-[11px] font-medium tracking-wide uppercase flex items-center gap-2 text-gray-500">
+                      {selectedConversation.type==='group' ? `${selectedConversation.participants.length} members` : (()=>{ const other = selectedConversation.participants.find(p=>p.uid!==currentUser.uid); if(other){ const s=getOnlineStatus(other.uid); return <span className={`flex items-center gap-1 ${s.status==='online'?'text-green-600':'text-gray-500'}`}>{s.text}{otherUserTyping && <span className="inline-flex items-center gap-0.5 text-green-600"><span className="animate-pulse">•</span><span className="animate-pulse delay-150">•</span><span className="animate-pulse delay-300">•</span></span>}</span>; } return 'Direct conversation'; })()}
+                      {selectedConversation.productContext?.productName && <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">{selectedConversation.productContext.productName}</span>}
+                    </div>
+                  </div>
                 </div>
-                <div className="chat-header-text">
-                  <h3>{getConversationTitle(selectedConversation)}</h3>
-                  <p className="chat-status">
-                    {selectedConversation.type === 'group' 
-                      ? `${selectedConversation.participants.length} members`
-                      : (() => {
-                          const otherParticipant = selectedConversation.participants.find(p => p.uid !== currentUser.uid);
-                          if (otherParticipant) {
-                            const status = getOnlineStatus(otherParticipant.uid);
-                            return (
-                              <>
-                                <span className={`status-text ${status.status}`}>
-                                  {status.text}
-                                </span>
-                                {otherUserTyping && (
-                                  <span className="typing-indicator">
-                                    <span className="typing-text">typing</span>
-                                    <span className="typing-dots">
-                                      <span></span>
-                                      <span></span>
-                                      <span></span>
-                                    </span>
+                <div className="flex items-center gap-2">
+                  {selectedConversation.type==='group' ? (
+                    <>
+                      <button onClick={()=>handleShowMembers(selectedConversation)} className="h-9 w-9 rounded-lg bg-white border border-gray-200 text-gray-600 hover:text-green-600 hover:border-green-300 flex items-center justify-center shadow-sm transition" title="Members">👥</button>
+                      <button onClick={handleAddMembersClick} className="h-9 w-9 rounded-lg bg-white border border-gray-200 text-gray-600 hover:text-green-600 hover:border-green-300 flex items-center justify-center shadow-sm transition" title="Add">➕</button>
+                    </>
+                  ) : null}
+                  <button className="h-9 w-9 rounded-lg bg-white border border-gray-200 text-gray-600 hover:text-green-600 hover:border-green-300 flex items-center justify-center shadow-sm transition" title="Info">ℹ️</button>
+                </div>
+              </div>
+
+              {/* Messages */}
+              <div className="flex-1 overflow-y-auto px-6 py-6 space-y-8" ref={messagesEndRef}>
+                {Object.entries(groupMessagesByDate(messages)).map(([date, dayMessages]) => (
+                  <div key={date} className="space-y-5">
+                    <div className="flex items-center gap-3"><div className="flex-1 h-px bg-gradient-to-r from-transparent via-gray-300 to-transparent"/><span className="text-[11px] font-semibold tracking-wider text-gray-500 uppercase">{formatDateHeader(date)}</span><div className="flex-1 h-px bg-gradient-to-r from-transparent via-gray-300 to-transparent"/></div>
+                    {dayMessages.map(message => {
+                      const own = message.senderUid === currentUser.uid;
+                      return (
+                        <div key={message._id} className={`flex gap-3 items-end ${own?'justify-end':'justify-start'}`}>                          
+                          {!own && (
+                            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 text-white text-xs font-semibold flex items-center justify-center shadow-sm">{getInitials(message.senderName)}</div>
+                          )}
+                          <div className={`max-w-[78%] flex flex-col ${own?'items-end':'items-start'}`}>
+                            {message.senderUid !== currentUser.uid && selectedConversation.type==='group' && <span className="text-[11px] font-semibold text-green-600 mb-1">{message.senderName}</span>}
+                            {message.productContext && (
+                              <div className="mb-2 rounded-lg border border-emerald-200/60 bg-emerald-50/60 p-2 flex gap-2 w-full shadow-sm">
+                                {message.productContext.productImage && <img src={message.productContext.productImage} alt={message.productContext.productName} className="h-12 w-12 rounded-md object-cover" />}
+                                <div className="min-w-0">
+                                  <div className="text-xs font-medium text-emerald-800 truncate">{message.productContext.productName}</div>
+                                  {message.productContext.productPrice && <div className="text-[11px] text-emerald-600 font-semibold">৳{message.productContext.productPrice}</div>}
+                                </div>
+                              </div>
+                            )}
+                            {message.attachments?.length>0 && (
+                              <div className="mb-2 flex flex-col gap-2 w-full">
+                                {message.attachments.map((att,i)=>(
+                                  <div key={i} className="group relative flex items-center gap-3 rounded-lg border border-gray-200 bg-white/80 backdrop-blur p-2 pr-3 shadow-sm hover:border-green-300 transition cursor-pointer" onClick={()=>window.open(att.url,'_blank')}>
+                                    {att.type==='image'? <img src={att.url} alt={att.filename} className="h-20 w-20 object-cover rounded-md"/> : <div className="h-12 w-12 rounded-md bg-gradient-to-br from-indigo-500 to-violet-600 text-white flex items-center justify-center text-lg">{att.type==='document'?'📄':'📁'}</div>}
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-xs font-medium text-gray-700 truncate">{att.filename}</p>
+                                      <p className="text-[11px] text-gray-400">{(att.size/1024/1024).toFixed(2)} MB</p>
+                                    </div>
+                                    <span className="text-sm opacity-0 group-hover:opacity-100 transition text-green-600">⬇️</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            <div className={`relative px-4 py-2 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap break-words shadow-sm ${own?'bg-green-600 text-white':'bg-white border border-gray-200 text-gray-800'} `}>
+                              {normalizeMessageContent(message.content)}
+                              <div className={`mt-1 flex items-center gap-1 text-[10px] ${own?'text-white/70':'text-gray-400'}`}>
+                                {new Date(message.createdAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}
+                                {own && (
+                                  <span>
+                                    {message.readBy && message.readBy.length>0 ? '✓✓' : message.isDelivered ? '✓' : '…'}
                                   </span>
                                 )}
-                              </>
-                            );
-                          }
-                          return 'Direct conversation';
-                        })()
-                    }
-                  </p>
-                </div>
-              </div>
-              <div className="chat-actions">
-                {selectedConversation.type === 'group' ? (
-                  <>
-                    <button 
-                      className="action-button" 
-                      onClick={() => handleShowMembers(selectedConversation)}
-                      title="View members"
-                    >
-                      �
-                    </button>
-                    <button 
-                      className="action-button" 
-                      onClick={handleAddMembersClick}
-                      title="Add members"
-                    >
-                      ➕
-                    </button>
-                    <button className="action-button" title="Group info">ℹ️</button>
-                  </>
-                ) : (
-                  <>
-                    <button className="action-button">�📞</button>
-                    <button className="action-button">📹</button>
-                    <button className="action-button">ℹ️</button>
-                  </>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+                {otherUserTyping && (
+                  <div className="flex items-end gap-3">
+                    <div className="h-8 w-8 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 text-white text-xs font-semibold flex items-center justify-center shadow-sm">
+                      {(()=>{const other=selectedConversation.participants.find(p=>p.uid!==currentUser.uid);return getInitials(other?.name||'U');})()}
+                    </div>
+                    <div className="px-4 py-2 rounded-2xl bg-white border border-gray-200 text-gray-500 shadow-sm flex gap-1">
+                      <span className="animate-pulse">•</span><span className="animate-pulse delay-150">•</span><span className="animate-pulse delay-300">•</span>
+                    </div>
+                  </div>
                 )}
               </div>
-            </div>
-            
-            {/* Messages */}
-            <div className="messages-container">
-              {Object.entries(groupMessagesByDate(messages)).map(([date, dayMessages]) => (
-                <div key={date}>
-                  <div className="message-date">
-                    <span>{formatDateHeader(date)}</span>
-                  </div>
-                  {dayMessages.map(message => (
-                    <div
-                      key={message._id}
-                      className={`message ${message.senderUid === currentUser.uid ? 'own' : ''}`}
-                    >
-                      {message.senderUid !== currentUser.uid && (
-                        <div className="message-avatar">
-                          {getInitials(message.senderName)}
-                        </div>
-                      )}
-                      <div className="message-bubble">
-                        {message.senderUid !== currentUser.uid && selectedConversation.type === 'group' && (
-                          <div className="message-sender">{message.senderName}</div>
-                        )}
-                        
-                        {/* Product Context Display */}
-                        {message.productContext && (
-                          <div className="message-product-context">
-                            <div className="product-info">
-                              {message.productContext.productImage && (
-                                <img 
-                                  src={message.productContext.productImage} 
-                                  alt={message.productContext.productName}
-                                  className="product-thumbnail"
-                                />
-                              )}
-                              <div className="product-details">
-                                <span className="product-name">{message.productContext.productName}</span>
-                                {message.productContext.productPrice && (
-                                  <span className="product-price">৳{message.productContext.productPrice}</span>
-                                )}
-                                {message.productContext.vendorStoreId && (
-                                  <span className="product-store">Store ID: {message.productContext.vendorStoreId}</span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                        
-                        {/* Attachments Display */}
-                        {message.attachments && message.attachments.length > 0 && (
-                          <div className="message-attachments">
-                            {message.attachments.map((attachment, index) => (
-                              <div key={index} className="attachment">
-                                {attachment.type === 'image' ? (
-                                  <div className="image-attachment">
-                                    <img 
-                                      src={attachment.url} 
-                                      alt={attachment.filename}
-                                      className="attachment-image"
-                                      onClick={() => window.open(attachment.url, '_blank')}
-                                    />
-                                  </div>
-                                ) : (
-                                  <div className="file-attachment">
-                                    <div className="file-icon">
-                                      {attachment.type === 'document' ? '📄' : '📁'}
-                                    </div>
-                                    <div className="file-info">
-                                      <span className="file-name">{attachment.filename}</span>
-                                      <span className="file-size">
-                                        {(attachment.size / 1024 / 1024).toFixed(2)} MB
-                                      </span>
-                                    </div>
-                                    <button 
-                                      className="download-button"
-                                      onClick={() => window.open(attachment.url, '_blank')}
-                                    >
-                                      ⬇️
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        
-                        <p className="message-content">{message.content}</p>
-                        <div className="message-time">
-                          {new Date(message.createdAt).toLocaleTimeString([], { 
-                            hour: '2-digit', 
-                            minute: '2-digit' 
-                          })}
-                          {/* Seen/Delivered indicators for own messages */}
-                          {message.senderUid === currentUser.uid && (
-                            <div className="message-status">
-                              {message.readBy && message.readBy.length > 0 ? (
-                                <span className="status-icon seen" title="Seen">✓✓</span>
-                              ) : message.isDelivered ? (
-                                <span className="status-icon delivered" title="Delivered">✓</span>
-                              ) : (
-                                <span className="status-icon sending" title="Sending">⏳</span>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ))}
-              
-              {/* Typing Indicator */}
-              {otherUserTyping && (
-                <div className="message">
-                  <div className="message-avatar">
-                    {(() => {
-                      const otherParticipant = selectedConversation.participants.find(p => p.uid !== currentUser.uid);
-                      return getInitials(otherParticipant?.name || 'U');
-                    })()}
-                  </div>
-                  <div className="message-bubble typing-bubble">
-                    <div className="typing-animation">
-                      <span></span>
-                      <span></span>
-                      <span></span>
+
+              {/* Input */}
+              <div className="mt-auto border-t border-gray-200/80 bg-white/90 backdrop-blur p-4">
+                {/* Hidden file input */}
+                <input type="file" ref={fileInputRef} onChange={handleFileSelect} className="hidden" accept="image/*,application/pdf,.doc,.docx,.txt" />
+                {selectedFile && (
+                  <div className="mb-3 flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50/70 px-3 py-2 text-xs text-emerald-700">
+                    <span className="truncate flex-1">📎 {selectedFile.name}</span>
+                    <div className="flex items-center gap-2 ml-3">
+                      <button onClick={handleFileUpload} disabled={uploadingFile} className="px-2 py-1 text-[11px] rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-50">{uploadingFile?'Uploading…':'Upload'}</button>
+                      <button onClick={()=>{setSelectedFile(null); if(fileInputRef.current) fileInputRef.current.value='';}} className="px-2 py-1 text-[11px] rounded-md bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-100">✕</button>
                     </div>
                   </div>
-                </div>
-              )}
-              
-              <div ref={messagesEndRef} />
-            </div>
-            
-            {/* Message Input */}
-            <div className="message-input-container">
-              {/* File Input (hidden) */}
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileSelect}
-                style={{ display: 'none' }}
-                accept="image/*,application/pdf,.doc,.docx,.txt"
-              />
-              
-              {/* Selected File Preview */}
-              {selectedFile && (
-                <div className="file-preview">
-                  <div className="file-preview-content">
-                    <span className="file-preview-name">📎 {selectedFile.name}</span>
-                    <div className="file-preview-actions">
-                      <button 
-                        type="button" 
-                        onClick={handleFileUpload}
-                        disabled={uploadingFile}
-                        className="upload-button"
-                      >
-                        {uploadingFile ? '⏳' : '📤'} Upload
-                      </button>
-                      <button 
-                        type="button" 
-                        onClick={() => {
-                          setSelectedFile(null);
-                          if (fileInputRef.current) {
-                            fileInputRef.current.value = '';
-                          }
-                        }}
-                        className="cancel-button"
-                      >
-                        ❌
-                      </button>
-                    </div>
+                )}
+                <form onSubmit={handleSendMessage} className="flex items-end gap-2">
+                  <button type="button" onClick={handleAttachmentClick} disabled={uploadingFile} className="h-11 w-11 flex-shrink-0 rounded-xl border border-gray-200 bg-white hover:border-green-300 hover:text-green-600 flex items-center justify-center shadow-sm transition disabled:opacity-40" title="Attach">📎</button>
+                  <div className="flex-1 relative">
+                    <textarea
+                      ref={messageInputRef}
+                      rows={1}
+                      onKeyPress={handleKeyPress}
+                      value={newMessage}
+                      onChange={(e)=>{setNewMessage(e.target.value);handleTypingStart();}}
+                      placeholder="Type a message..."
+                      className="w-full resize-none rounded-xl border border-gray-200 bg-white/70 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-green-500/40 focus:border-green-400 shadow-sm placeholder:text-gray-400"
+                    />
                   </div>
-                </div>
-              )}
-              
-              <form onSubmit={handleSendMessage}>
-                <div className="message-input-wrapper">
-                  <button 
-                    type="button" 
-                    className="attachment-button"
-                    onClick={handleAttachmentClick}
-                    disabled={uploadingFile}
-                  >
-                    📎
-                  </button>
-                  <textarea
-                    ref={messageInputRef}
-                    className="message-input"
-                    placeholder="Type a message..."
-                    value={newMessage}
-                    onChange={(e) => {
-                      setNewMessage(e.target.value);
-                      handleTypingStart();
-                    }}
-                    onKeyPress={handleKeyPress}
-                    rows={1}
-                  />
-                  <button
-                    type="submit"
-                    className="send-button"
-                    disabled={!newMessage.trim() || sending}
-                  >
-                    {sending ? '⏳' : '➤'}
-                  </button>
-                </div>
-              </form>
+                  <button type="submit" disabled={!newMessage.trim()||sending} className="h-11 px-6 rounded-xl bg-green-600 text-white text-sm font-medium shadow hover:bg-green-700 disabled:opacity-50 flex items-center justify-center min-w-[80px] transition">{sending?'Sending…':'Send'}</button>
+                </form>
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-col items-center justify-center flex-1 text-center px-10">
+              <div className="h-20 w-20 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 text-white flex items-center justify-center text-4xl shadow mb-6">💬</div>
+              <h3 className="text-lg font-semibold text-gray-800 mb-2">Select a conversation</h3>
+              <p className="text-sm text-gray-500 max-w-xs">Choose a conversation from the left panel to start messaging.</p>
             </div>
-          </>
-        ) : (
-          <div className="empty-chat">
-            <div className="empty-chat-icon">💬</div>
-            <h3>Select a conversation</h3>
-            <p>Choose a conversation from the sidebar to start messaging.</p>
-          </div>
-        )}
+          )}
         </div>
       )}
-      
+
       {/* Group Creation Modal */}
       {showCreateGroupModal && (
         <div style={{

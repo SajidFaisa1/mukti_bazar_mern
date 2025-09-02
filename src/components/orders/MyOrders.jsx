@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
+import VerificationGate from '../verification/VerificationGate';
+import VerificationUpload from '../verification/VerificationUpload';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Package, 
-  Clock, 
-  CheckCircle, 
-  Truck, 
-  XCircle, 
+import {
+  Package,
+  Clock,
+  CheckCircle,
+  Truck,
+  XCircle,
   CreditCard,
   MapPin,
   Calendar,
@@ -22,7 +24,7 @@ import {
 } from 'lucide-react';
 import { useClientAuth } from '../../contexts/ClientAuthContext';
 import { useVendorAuth } from '../../contexts/VendorAuthContext';
-import './MyOrders.css';
+// Tailwind refactor: legacy CSS removed
 
 const MyOrders = () => {
   const navigate = useNavigate();
@@ -42,6 +44,8 @@ const MyOrders = () => {
     totalPages: 1,
     totalOrders: 0
   });
+  const [verificationStatus, setVerificationStatus] = useState(null); // required | pending | rejected
+  const [showVerificationUpload, setShowVerificationUpload] = useState(false);
 
   // Get current user info
   const getCurrentUser = () => {
@@ -63,6 +67,21 @@ const MyOrders = () => {
     }
     return null;
   };
+
+  // Derive verification status (client only) from user object
+  const deriveVerificationStatus = () => {
+    try {
+      const current = getCurrentUser();
+      if (!current || current.role !== 'client') return null;
+      const s = current.user?.verification?.status;
+      if (['required','pending','rejected'].includes(s)) return s;
+      return null;
+    } catch(_) { return null; }
+  };
+
+  useEffect(() => {
+    setVerificationStatus(deriveVerificationStatus());
+  }, [clientAuth.user]);
 
   // Fetch orders from backend
   const fetchOrders = async (page = 1, status = 'all', paymentStatus = 'all', search = '') => {
@@ -88,6 +107,18 @@ const MyOrders = () => {
       });
 
       if (!response.ok) {
+        // Attempt to parse structured error (verification block etc.)
+        try {
+          const errData = await response.json();
+          if (errData.code === 'VERIFICATION_BLOCK') {
+            setVerificationStatus(errData.verificationStatus || 'required');
+            // Do not treat as fatal error for UI; show gate + existing orders section empty
+            setOrders([]);
+            setPagination({ currentPage:1,totalPages:1,totalOrders:0 });
+            setLoading(false);
+            return;
+          }
+        } catch (_) { /* ignore JSON parse */ }
         throw new Error('Failed to fetch orders');
       }
 
@@ -205,9 +236,9 @@ const MyOrders = () => {
   };
 
   const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('bn-BD', {
       style: 'currency',
-      currency: 'USD'
+      currency: 'BDT'
     }).format(amount);
   };
 
@@ -215,12 +246,12 @@ const MyOrders = () => {
 
   if (!currentUser) {
     return (
-      <div className="my-orders-container">
-        <div className="auth-required">
-          <AlertCircle size={48} />
-          <h3>Authentication Required</h3>
-          <p>Please log in to view your orders.</p>
-          <button onClick={() => navigate('/login')} className="btn btn-primary">
+      <div className="max-w-4xl mx-auto p-6">
+        <div className="flex flex-col items-center text-center border border-amber-200 bg-amber-50 rounded-xl p-10">
+          <AlertCircle className="text-amber-500 mb-4" size={56} />
+          <h3 className="text-xl font-semibold text-gray-800 mb-2">Authentication Required</h3>
+            <p className="text-gray-600 mb-6 max-w-md">Please log in to view and track your orders.</p>
+          <button onClick={() => navigate('/login')} className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-md text-sm font-medium shadow-sm">
             Log In
           </button>
         </div>
@@ -229,19 +260,32 @@ const MyOrders = () => {
   }
 
   return (
-    <div className="my-orders-container">
-      <div className="my-orders-header">
-        <h1>My Orders</h1>
-        <p>Track and manage your order history</p>
-      </div>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <header className="mb-8">
+        <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">My Orders</h1>
+        <p className="text-sm text-gray-500 mt-1">Track and manage your order history</p>
+      </header>
+
+      {currentUser.role === 'client' && (
+        <>
+          <VerificationGate status={verificationStatus} onStart={() => setShowVerificationUpload(true)} />
+          {showVerificationUpload && (
+            <VerificationUpload
+              onClose={() => setShowVerificationUpload(false)}
+              onSubmitted={(s) => { setVerificationStatus(s); }}
+            />
+          )}
+        </>
+      )}
 
       {/* Filters */}
-      <div className="orders-filters">
-        <div className="filter-group">
-          <Filter size={16} />
-          <select 
-            value={filters.status} 
-            onChange={(e) => setFilters({...filters, status: e.target.value})}
+      <div className="bg-white/70 backdrop-blur rounded-xl shadow-sm border border-gray-200 p-4 mb-6 flex flex-wrap gap-4 items-center">
+        <div className="flex items-center gap-2">
+          <Filter size={16} className="text-gray-500" />
+          <select
+            value={filters.status}
+            onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+            className="text-sm rounded-md border-gray-300 focus:ring-emerald-500 focus:border-emerald-500"
           >
             <option value="all">All Statuses</option>
             <option value="pending">Pending</option>
@@ -253,12 +297,12 @@ const MyOrders = () => {
             <option value="refunded">Refunded</option>
           </select>
         </div>
-
-        <div className="filter-group">
-          <CreditCard size={16} />
-          <select 
-            value={filters.paymentStatus} 
-            onChange={(e) => setFilters({...filters, paymentStatus: e.target.value})}
+        <div className="flex items-center gap-2">
+          <CreditCard size={16} className="text-gray-500" />
+          <select
+            value={filters.paymentStatus}
+            onChange={(e) => setFilters({ ...filters, paymentStatus: e.target.value })}
+            className="text-sm rounded-md border-gray-300 focus:ring-emerald-500 focus:border-emerald-500"
           >
             <option value="all">All Payments</option>
             <option value="pending">Payment Pending</option>
@@ -267,229 +311,224 @@ const MyOrders = () => {
             <option value="refunded">Refunded</option>
           </select>
         </div>
-        
-        <div className="search-group">
-          <Search size={16} />
+        <div className="flex items-center gap-2 flex-1 min-w-[220px] max-w-sm">
+          <Search size={16} className="text-gray-500" />
           <input
             type="text"
             placeholder="Search orders..."
             value={filters.search}
-            onChange={(e) => setFilters({...filters, search: e.target.value})}
+            onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+            className="w-full text-sm rounded-md border-gray-300 focus:ring-emerald-500 focus:border-emerald-500"
           />
         </div>
-
-        <button 
+        <button
           onClick={() => fetchOrders(pagination.currentPage, filters.status, filters.paymentStatus, filters.search)}
-          className="btn btn-icon"
+          className="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 shadow-sm"
           title="Refresh"
         >
           <RefreshCw size={16} />
         </button>
       </div>
 
-      {/* Loading State */}
+      {/* Loading */}
       {loading && (
-        <div className="loading-state">
-          <div className="spinner"></div>
-          <p>Loading your orders...</p>
+        <div className="flex flex-col items-center justify-center py-24">
+          <div className="h-10 w-10 rounded-full border-4 border-emerald-500/30 border-t-emerald-600 animate-spin mb-4" />
+          <p className="text-sm text-gray-600">Loading your orders...</p>
         </div>
       )}
 
-      {/* Error State */}
-      {error && (
-        <div className="error-state">
-          <AlertCircle size={24} />
-          <p className="error-message">{error}</p>
-          <button onClick={() => fetchOrders(1, filters.status, filters.paymentStatus, filters.search)}>
+      {/* Error */}
+      {!loading && error && (
+        <div className="flex flex-col items-center text-center border border-red-200 bg-red-50 rounded-xl p-10 mb-8">
+          <AlertCircle className="text-red-500 mb-3" size={40} />
+          <p className="text-sm text-red-600 font-medium mb-4">{error}</p>
+          <button
+            onClick={() => fetchOrders(1, filters.status, filters.paymentStatus, filters.search)}
+            className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-5 py-2 rounded-md text-sm font-medium shadow-sm"
+          >
             Try Again
           </button>
         </div>
       )}
 
-      {/* Orders List */}
+      {/* Orders / Empty */}
       {!loading && !error && (
         <>
           {orders.length === 0 ? (
-            <div className="empty-state">
-              <Package size={48} />
-              <h3>No orders found</h3>
-              <p>You haven't placed any orders yet or no orders match your filters.</p>
-              <button onClick={() => navigate('/')} className="btn btn-primary">
+            <div className="flex flex-col items-center text-center py-24">
+              <Package className="text-gray-400 mb-4" size={56} />
+              <h3 className="text-lg font-medium text-gray-800 mb-2">No orders found</h3>
+              <p className="text-sm text-gray-500 mb-6 max-w-md">You haven't placed any orders yet or none match your current filters.</p>
+              <button
+                onClick={() => navigate('/')}
+                className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-md text-sm font-medium shadow-sm"
+              >
                 Start Shopping
               </button>
             </div>
           ) : (
-            <div className="orders-list">
-              {orders.map((order) => {
+            <ul className="space-y-6">
+              {orders.map(order => {
                 const statusInfo = getStatusIcon(order.status);
                 const paymentInfo = getPaymentStatusIcon(order.paymentStatus, order.paymentMethod);
-                
+                const badgeBase = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium';
+                const colorMap = {
+                  orange:'bg-amber-100 text-amber-700',
+                  blue:'bg-blue-100 text-blue-600',
+                  purple:'bg-violet-100 text-violet-600',
+                  indigo:'bg-indigo-100 text-indigo-600',
+                  green:'bg-emerald-100 text-emerald-600',
+                  red:'bg-red-100 text-red-600',
+                  gray:'bg-gray-100 text-gray-600'
+                };
                 return (
-                  <div key={order._id} className="order-card">
-                    <div className="order-header">
-                      <div className="order-info">
-                        <h3>#{order.orderNumber}</h3>
-                        <div className="order-badges">
-                          <div className={`status-badge ${statusInfo.color}`}>
-                            {statusInfo.icon}
-                            <span>{order.status.charAt(0).toUpperCase() + order.status.slice(1)}</span>
-                          </div>
-                          <div className={`payment-badge ${paymentInfo.color}`}>
-                            {paymentInfo.icon}
-                            <span>{order.paymentStatus.charAt(0).toUpperCase() + order.paymentStatus.slice(1)}</span>
+                  <li key={order._id} className="relative overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm hover:shadow-md transition-shadow">
+                    <div className="p-5">
+                      {/* Header */}
+                      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 pb-4 border-b border-gray-100">
+                        <div>
+                          <h3 className="text-lg font-semibold text-gray-900 tracking-tight mb-2">#{order.orderNumber}</h3>
+                          <div className="flex flex-wrap gap-2">
+                            <span className={`${badgeBase} ${colorMap[statusInfo.color]}`}>{statusInfo.icon}<span>{order.status}</span></span>
+                            <span className={`${badgeBase} ${colorMap[paymentInfo.color]}`}>{paymentInfo.icon}<span>{order.paymentStatus}</span></span>
                           </div>
                         </div>
+                        <div className="flex items-center gap-1 text-emerald-600 text-xl font-semibold">
+                          <DollarSign size={18} />
+                          <span>{formatCurrency(order.total)}</span>
+                        </div>
                       </div>
-                      <div className="order-amount">
-                        <DollarSign size={16} />
-                        {formatCurrency(order.total)}
-                      </div>
-                    </div>
 
-                    <div className="order-meta">
-                      <div className="meta-item">
-                        <Calendar size={14} />
-                        <span>Ordered: {formatDate(order.orderedAt)}</span>
+                      {/* Meta */}
+                      <div className="flex flex-wrap gap-x-8 gap-y-3 pt-4 text-sm text-gray-600">
+                        <div className="flex items-center gap-1.5"><Calendar size={14} className="text-gray-400" /><span>{formatDate(order.orderedAt)}</span></div>
+                        <div className="flex items-center gap-1.5"><Package size={14} className="text-gray-400" /><span>{order.itemCount} items</span></div>
+                        <div className="flex items-center gap-1.5"><Truck size={14} className="text-gray-400" /><span>{order.deliveryMethod}</span></div>
+                        <div className="flex items-center gap-1.5"><CreditCard size={14} className="text-gray-400" /><span className="uppercase font-medium">{order.paymentMethod}</span></div>
                       </div>
-                      <div className="meta-item">
-                        <Package size={14} />
-                        <span>{order.itemCount} items</span>
-                      </div>
-                      <div className="meta-item">
-                        <Truck size={14} />
-                        <span>{order.deliveryMethod}</span>
-                      </div>
-                      <div className="meta-item">
-                        <span className="payment-method">
-                          {paymentInfo.icon}
-                          {order.paymentMethod.toUpperCase()}
-                        </span>
-                      </div>
-                    </div>
 
-                    <div className="order-items">
-                      <h4>Items Ordered</h4>
-                      <div className="items-grid">
-                        {order.items.slice(0, 3).map((item, index) => (
-                          <div key={index} className="item-card">
-                            {item.images && item.images[0] && (
-                              <img 
-                                src={item.images[0]} 
-                                alt={item.name}
-                                className="item-image"
-                              />
-                            )}
-                            <div className="item-details">
-                              <span className="item-name">{item.name}</span>
-                              <span className="item-quantity">Qty: {item.quantity}</span>
-                              <span className="item-price">
-                                {formatCurrency((item.price || item.unitPrice) * item.quantity)}
-                              </span>
+                      {/* Items */}
+                      <div className="mt-6">
+                        <h4 className="text-sm font-semibold text-gray-800 mb-3">Items</h4>
+                        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {order.items.slice(0,3).map((item, idx) => (
+                            <div key={idx} className="flex items-center gap-3 p-3 rounded-lg border border-gray-100 bg-gray-50/60">
+                              {item.images?.[0] && (
+                                <img src={item.images[0]} alt={item.name} className="h-14 w-14 rounded-md object-cover ring-1 ring-gray-200" />
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-medium text-gray-800 truncate">{item.name}</p>
+                                <p className="text-[11px] text-gray-500">Qty: {item.quantity}</p>
+                                <p className="text-xs font-semibold text-emerald-600">{formatCurrency((item.price || item.unitPrice) * item.quantity)}</p>
+                              </div>
                             </div>
-                          </div>
-                        ))}
-                        {order.items.length > 3 && (
-                          <div className="more-items">
-                            +{order.items.length - 3} more items
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {order.deliveryAddress && (
-                      <div className="delivery-info">
-                        <h4>Delivery Address</h4>
-                        <div className="address-details">
-                          <MapPin size={14} />
-                          <span>
-                            {order.deliveryAddress.name} - {order.deliveryAddress.phone}
-                            <br />
-                            {order.deliveryAddress.addressLine1}, {order.deliveryAddress.city}
-                            <br />
-                            {order.deliveryAddress.state} {order.deliveryAddress.zip}
-                          </span>
+                          ))}
+                          {order.items.length > 3 && (
+                            <div className="flex items-center justify-center p-3 rounded-lg border border-dashed border-gray-200 text-xs text-gray-500 bg-white">
+                              +{order.items.length - 3} more
+                            </div>
+                          )}
                         </div>
                       </div>
-                    )}
 
-                    {(order.notes || order.specialInstructions) && (
-                      <div className="order-notes">
-                        {order.notes && (
-                          <div>
-                            <strong>Notes:</strong> {order.notes}
+                      {/* Address */}
+                      {order.deliveryAddress && (
+                        <div className="mt-6">
+                          <h4 className="text-sm font-semibold text-gray-800 mb-2">Delivery Address</h4>
+                          <div className="flex items-start gap-2 text-sm text-gray-600">
+                            <MapPin size={16} className="text-gray-400 mt-0.5" />
+                            <p className="leading-snug">
+                              {order.deliveryAddress.name} - {order.deliveryAddress.phone}<br />
+                              {order.deliveryAddress.addressLine1}, {order.deliveryAddress.city}<br />
+                              {order.deliveryAddress.state} {order.deliveryAddress.zip}
+                            </p>
                           </div>
+                        </div>
+                      )}
+
+                      {/* Notes */}
+                      {(order.notes || order.specialInstructions) && (
+                        <div className="mt-6 rounded-lg border border-gray-100 bg-gray-50 p-4 text-sm text-gray-600 space-y-2">
+                          {order.notes && <p><span className="font-medium text-gray-800">Notes:</span> {order.notes}</p>}
+                          {order.specialInstructions && <p><span className="font-medium text-gray-800">Special Instructions:</span> {order.specialInstructions}</p>}
+                        </div>
+                      )}
+
+                      {/* Actions */}
+                      <div className="mt-6 pt-4 border-t border-gray-100 flex flex-wrap gap-3">
+                        <button
+                          onClick={() => navigate(`/orders/${order.orderNumber}`)}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                        >
+                          <Eye size={14} /> Details
+                        </button>
+                        {order.status === 'delivered' && (
+                          <button
+                            onClick={() => {
+                              // Trigger invoice download
+                              fetch(`http://localhost:5005/api/orders/${order.orderNumber}/invoice`, {
+                                headers: { 'Authorization': `Bearer ${currentUser.token || localStorage.getItem('clientToken') || sessionStorage.getItem('vendorToken')}` }
+                              }).then(r => {
+                                if (!r.ok) throw new Error('Invoice failed');
+                                return r.blob();
+                              }).then(blob => {
+                                const url = window.URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = `invoice-${order.orderNumber}.pdf`;
+                                document.body.appendChild(a);
+                                a.click();
+                                a.remove();
+                                window.URL.revokeObjectURL(url);
+                              }).catch(()=> alert('Failed to download invoice'));
+                            }}
+                            className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                          >
+                            <Download size={14} /> Invoice
+                          </button>
                         )}
-                        {order.specialInstructions && (
-                          <div>
-                            <strong>Special Instructions:</strong> {order.specialInstructions}
-                          </div>
+                        {['pending','confirmed'].includes(order.status) && (
+                          <button
+                            onClick={() => {
+                              if (window.confirm('Are you sure you want to cancel this order?')) cancelOrder(order.orderNumber);
+                            }}
+                            className="inline-flex items-center gap-1.5 rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700"
+                          >
+                            <XCircle size={14} /> Cancel
+                          </button>
+                        )}
+                        {order.status === 'shipped' && (
+                          <button
+                            onClick={() => navigate(`/orders/${order.orderNumber}/tracking`)}
+                            className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
+                          >
+                            <Truck size={14} /> Track
+                          </button>
                         )}
                       </div>
-                    )}
-
-                    <div className="order-actions">
-                      <button 
-                        onClick={() => navigate(`/orders/${order.orderNumber}`)}
-                        className="btn btn-outline"
-                      >
-                        <Eye size={14} />
-                        View Details
-                      </button>
-                      
-                      {order.status === 'delivered' && (
-                        <button className="btn btn-outline">
-                          <Download size={14} />
-                          Download Invoice
-                        </button>
-                      )}
-
-                      {['pending', 'confirmed'].includes(order.status) && (
-                        <button 
-                          onClick={() => {
-                            if (window.confirm('Are you sure you want to cancel this order?')) {
-                              cancelOrder(order.orderNumber);
-                            }
-                          }}
-                          className="btn btn-danger"
-                        >
-                          <XCircle size={14} />
-                          Cancel Order
-                        </button>
-                      )}
-
-                      {order.status === 'shipped' && (
-                        <button 
-                          onClick={() => navigate(`/orders/${order.orderNumber}/tracking`)}
-                          className="btn btn-primary"
-                        >
-                          <Truck size={14} />
-                          Track Order
-                        </button>
-                      )}
                     </div>
-                  </div>
+                  </li>
                 );
               })}
-            </div>
+            </ul>
           )}
 
           {/* Pagination */}
           {pagination.totalPages > 1 && (
-            <div className="pagination">
-              <button 
+            <div className="flex items-center justify-center gap-4 mt-10">
+              <button
                 onClick={() => fetchOrders(pagination.currentPage - 1, filters.status, filters.paymentStatus, filters.search)}
                 disabled={pagination.currentPage === 1}
-                className="btn btn-outline"
+                className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-4 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-40"
               >
                 Previous
               </button>
-              <span className="page-info">
-                Page {pagination.currentPage} of {pagination.totalPages}
-              </span>
-              <button 
+              <span className="text-xs text-gray-500">Page {pagination.currentPage} of {pagination.totalPages}</span>
+              <button
                 onClick={() => fetchOrders(pagination.currentPage + 1, filters.status, filters.paymentStatus, filters.search)}
                 disabled={pagination.currentPage === pagination.totalPages}
-                className="btn btn-outline"
+                className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-4 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-40"
               >
                 Next
               </button>

@@ -67,7 +67,7 @@ export const CartProvider = ({ children }) => {
     loadCart();
   }, []);
 
-  const addToCart = async (product) => {
+  const addToCart = async (product, { onBlocked } = {}) => {
     const uid = getCurrentUserUid();
     if (!uid) {
       dispatch({ type: 'SET_ERROR', payload: 'Please login to add items to cart' });
@@ -89,7 +89,16 @@ export const CartProvider = ({ children }) => {
         const updatedCart = await response.json();
         dispatch({ type: 'SET_CART', payload: updatedCart });
       } else {
-        throw new Error('Failed to add item to cart');
+        // Attempt parse to detect verification / ban codes
+        let errPayload = { error: 'Failed to add item to cart' };
+        try { errPayload = await response.json(); } catch(_) {}
+        if (errPayload.code === 'VERIFICATION_BLOCK' || errPayload.code === 'BANNED') {
+          // Provide richer error message and callback to trigger UI gate
+            dispatch({ type: 'SET_ERROR', payload: errPayload.error });
+            if (onBlocked) onBlocked(errPayload);
+            return;
+        }
+        throw new Error(errPayload.error || 'Failed to add item to cart');
       }
     } catch (error) {
       console.error('Failed to add to cart:', error);
@@ -123,11 +132,35 @@ export const CartProvider = ({ children }) => {
     }
   };
 
+  const reAddItem = async (item) => {
+    // Re-add removed item via backend for authoritative state
+    const uid = getCurrentUserUid();
+    if (!uid) return;
+    try {
+      const response = await fetch(`http://localhost:5005/api/cart/uid/${uid}/items`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId: item.productId || item._id || item.id, quantity: item.quantity || 1 })
+      });
+      if (response.ok) {
+        const updatedCart = await response.json();
+        dispatch({ type: 'SET_CART', payload: updatedCart });
+      }
+    } catch (e) {
+      console.error('Failed to restore item:', e);
+    }
+  };
+
   const updateQuantity = async (itemId, quantity) => {
     const uid = getCurrentUserUid();
     if (!uid) return;
 
-    dispatch({ type: 'SET_LOADING', payload: true });
+    // Optimistic update: adjust quantity locally first to avoid UI flicker
+    dispatch({ type: 'SET_CART', payload: {
+      ...cart,
+      items: cart.items.map(it => it._id === itemId || it.id === itemId ? { ...it, quantity } : it)
+    }});
+
     try {
       const response = await fetch(`http://localhost:5005/api/cart/uid/${uid}/items/${itemId}`, {
         method: 'PUT',
@@ -144,8 +177,6 @@ export const CartProvider = ({ children }) => {
     } catch (error) {
       console.error('Failed to update quantity:', error);
       dispatch({ type: 'SET_ERROR', payload: 'Failed to update quantity' });
-    } finally {
-      dispatch({ type: 'SET_LOADING', payload: false });
     }
   };
 
@@ -425,6 +456,7 @@ export const CartProvider = ({ children }) => {
         removeFromCart,
         updateQuantity,
         clearCart,
+  reAddItem,
         updateDeliveryAddress,
         updateDeliveryDetails,
         getDeliveryMethods,

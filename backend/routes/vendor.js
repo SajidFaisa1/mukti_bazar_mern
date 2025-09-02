@@ -6,6 +6,38 @@ const { protect, adminOnly } = require('../middleware/auth');
 const { randomUUID } = require('crypto');
 const router = express.Router();
 
+// GET /api/vendors/discover?limit=12 – top rated / recent hybrid list
+router.get('/discover', async (req, res) => {
+  try {
+    const rawLimit = req.query.limit || '12';
+    if (rawLimit === 'all') {
+      const all = await Vendor.find({})
+        .sort({ storeRatingAvg: -1, storeRatingCount: -1, createdAt: -1 })
+        .select('businessName storeId shopLogo storeRatingAvg storeRatingCount trustScore certifications address isApproved');
+      return res.json({ vendors: all, total: all.length });
+    }
+    const limit = Math.min(parseInt(rawLimit,10), 100);
+    const filterRated = { storeRatingCount: { $gte: 1 } };
+    const top = await Vendor.find(filterRated)
+      .sort({ storeRatingAvg: -1, storeRatingCount: -1, createdAt: -1 })
+      .limit(limit)
+      .select('businessName storeId shopLogo storeRatingAvg storeRatingCount trustScore certifications address isApproved');
+    if (top.length >= limit) return res.json({ vendors: top, total: top.length });
+    const remaining = limit - top.length;
+    if (remaining > 0) {
+      const recent = await Vendor.find({ storeRatingCount: { $lt: 1 } })
+        .sort({ createdAt: -1 })
+        .limit(remaining)
+        .select('businessName storeId shopLogo storeRatingAvg storeRatingCount trustScore certifications address isApproved');
+      return res.json({ vendors: [...top, ...recent], total: top.length + recent.length });
+    }
+    return res.json({ vendors: top, total: top.length });
+  } catch (e) {
+    console.error('Discover vendors error', e);
+    res.status(500).json({ error: 'Failed to load discover vendors' });
+  }
+});
+
 // POST /api/vendors/signup  – minimal vendor registration
 router.post('/signup', async (req, res) => {
   try {

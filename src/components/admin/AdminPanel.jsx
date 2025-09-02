@@ -4,6 +4,7 @@ import { getAllDivision, getAllDistrict, getAllUnion } from 'bd-divisions-to-uni
 import { useAdminAuth } from '../../contexts/AdminAuthContext';
 import VendorApproval from './VendorApproval';
 import './AdminPanel.css';
+import UserVerificationStatus from './UserVerificationStatus';
 
 const AdminPanel = () => {
   const { token } = useAdminAuth(); // Get admin token
@@ -297,6 +298,12 @@ const AdminPanel = () => {
           >
             Product Approvals
           </button>
+          <button
+            className={activeTab === 'verification' ? 'active' : ''}
+            onClick={() => setActiveTab('verification')}
+          >
+            User Verification Status
+          </button>
         </div>
       </div>
       
@@ -304,6 +311,7 @@ const AdminPanel = () => {
         {activeTab === 'approvals' && <VendorApproval token={token} />}
         {activeTab === 'statistics' && <Statistics />}
         {activeTab === 'products' && <ProductApprovals />}
+  {activeTab === 'verification' && <UserVerificationStatus token={token} />}
       </div>
     </div>
   );

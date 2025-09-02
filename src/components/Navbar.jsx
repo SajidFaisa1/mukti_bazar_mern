@@ -21,6 +21,8 @@ const Navbar = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showLogoUpload, setShowLogoUpload] = useState(false);
   const [currentLogo, setCurrentLogo] = useState(logo2);
+  const [showBottomNav, setShowBottomNav] = useState(true);
+  const [lastScrollY, setLastScrollY] = useState(0);
   const profileRef = useRef(null);
   const logoUploadRef = useRef(null);
 
@@ -137,34 +139,87 @@ const Navbar = () => {
 
   // Handle logo upload for admin using Cloudinary
   const handleLogoUpload = async (e) => {
+    console.log('handleLogoUpload called');
     const file = e.target.files[0];
+    console.log('File from event:', file);
+    
     if (file && role === 'admin') {
       try {
+        console.log('Uploading logo...', file.name, 'Size:', file.size, 'Type:', file.type);
+        
+        // Validate file type
+        const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+        if (!validTypes.includes(file.type)) {
+          alert('Please select a valid image file (JPG, PNG, GIF, or WebP)');
+          return;
+        }
+        
+        // Validate file size (5MB limit)
+        if (file.size > 5 * 1024 * 1024) {
+          alert('File size must be less than 5MB');
+          return;
+        }
+        
         const formData = new FormData();
         formData.append('logo', file);
 
-        const response = await fetch('http://localhost:5005/api/admin/upload-logo', {
+        // Get token from adminAuth or localStorage
+        const token = adminAuth.token || localStorage.getItem('admin_token') || sessionStorage.getItem('admin_token');
+        
+        if (!token) {
+          console.error('No admin token found');
+          alert('You must be logged in as an admin to upload logo');
+          return;
+        }
+
+        console.log('Making upload request...');
+        const response = await fetch('http://localhost:5005/api/admin/logo', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${adminAuth.token}`
+            'Authorization': `Bearer ${token}`
           },
           body: formData
         });
 
+        console.log('Upload response status:', response.status);
+        
         if (response.ok) {
           const data = await response.json();
+          console.log('Logo uploaded successfully:', data);
           setCurrentLogo(data.logoUrl);
           
           // Dispatch custom event to notify other components
           window.dispatchEvent(new CustomEvent('logoUpdated', {
             detail: { logoUrl: data.logoUrl }
           }));
+          
+          alert('Logo updated successfully!');
         } else {
-          console.error('Failed to upload logo');
+          const errorData = await response.text();
+          console.error('Failed to upload logo:', response.status, errorData);
+          alert('Failed to upload logo. Please try again.');
         }
       } catch (error) {
         console.error('Error uploading logo:', error);
+        alert('Error uploading logo: ' + error.message);
       }
+    } else if (!file) {
+      console.log('No file selected in handleLogoUpload');
+    } else if (role !== 'admin') {
+      console.log('User is not admin, role:', role);
+      alert('You must be an admin to upload logo');
+    }
+  };
+
+  // Alternative function to trigger file upload
+  const triggerFileUpload = () => {
+    console.log('triggerFileUpload called');
+    if (logoUploadRef.current) {
+      console.log('Triggering file input...');
+      logoUploadRef.current.value = ''; // Clear previous selection
+      logoUploadRef.current.click();
+    } else {
+      console.error('File input ref not found');
     }
   };
 
@@ -186,10 +241,61 @@ const Navbar = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Handle scroll for collapsible bottom navbar
+  useEffect(() => {
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+      const scrollDifference = Math.abs(currentScrollY - lastScrollY);
+      
+      // Only react to significant scroll movements (prevents jittery behavior)
+      if (scrollDifference < 5) return;
+      
+      // Show navbar when:
+      // 1. Scrolling up
+      // 2. At the very top (within 50px)
+      // 3. Small upward movement when near top
+      if (currentScrollY < lastScrollY || currentScrollY < 50) {
+        setShowBottomNav(true);
+      } 
+      // Hide navbar when:
+      // 1. Scrolling down significantly
+      // 2. Past the initial threshold (100px)
+      // 3. Moving down with enough velocity
+      else if (currentScrollY > lastScrollY && currentScrollY > 100 && scrollDifference > 10) {
+        setShowBottomNav(false);
+      }
+      
+      setLastScrollY(currentScrollY);
+    };
+
+    // Throttle scroll events for better performance
+    let ticking = false;
+    const throttledHandleScroll = () => {
+      if (!ticking) {
+        requestAnimationFrame(() => {
+          handleScroll();
+          ticking = false;
+        });
+        ticking = true;
+      }
+    };
+
+    window.addEventListener('scroll', throttledHandleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', throttledHandleScroll);
+  }, [lastScrollY]);
+
   return (
-    <nav className="sticky top-0 z-50 bg-white shadow-lg">
+    <nav 
+      className="sticky top-0 z-50 "
+      onMouseEnter={() => {
+        // Show bottom nav when hovering over the navbar area
+        if (!showBottomNav && window.scrollY > 100) {
+          setShowBottomNav(true);
+        }
+      }}
+    >
       {/* Top Header Section */}
-      <div style={{backgroundColor: '#262626'}} className="text-white">
+      <div style={{backgroundColor: '#262626'}} className="text-white relative z-10">
         <div className="max-w-8xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             
@@ -207,25 +313,54 @@ const Navbar = () => {
                     }}
                   />
                   {/* Admin Logo Upload Button */}
+               
                   {role === 'admin' && (
                     <button
-                      onClick={() => logoUploadRef.current?.click()}
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        console.log('Upload button clicked, role:', role);
+                        triggerFileUpload();
+                      }}
                       className="absolute -top-1 -right-1 bg-blue-500 hover:bg-blue-600 text-white rounded-full p-1 text-xs transition-colors duration-200"
                       title="Change Logo"
                     >
                       <FontAwesomeIcon icon={faUpload} size="xs" />
                     </button>
                   )}
-                  <input
-                    ref={logoUploadRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handleLogoUpload}
-                    className="hidden"
-                  />
                 </div>
                 <span className="text-2xl font-bold text-white"></span>
               </Link>
+              
+              {/* Hidden File Input - Outside Link to avoid conflicts */}
+              {role === 'admin' && (
+                <input
+                  ref={logoUploadRef}
+                  type="file"
+                  accept="image/*,image/jpeg,image/jpg,image/png,image/gif,image/webp"
+                  multiple={false}
+                  onChange={(e) => {
+                    console.log('File input onChange triggered');
+                    console.log('Selected files:', e.target.files);
+                    console.log('Selected file:', e.target.files[0]);
+                    if (e.target.files[0]) {
+                      console.log('File details:', {
+                        name: e.target.files[0].name,
+                        size: e.target.files[0].size,
+                        type: e.target.files[0].type
+                      });
+                      handleLogoUpload(e);
+                    } else {
+                      console.log('No file selected');
+                    }
+                  }}
+                  onFocus={() => console.log('File input focused')}
+                  onBlur={() => console.log('File input blurred')}
+                  className="hidden"
+                  style={{ display: 'none', position: 'absolute', left: '-9999px' }}
+                />
+              )}
             </div>
 
             {/* Right: Login/User Menu */}
@@ -259,6 +394,16 @@ const Navbar = () => {
                   
                   {showProfileMenu && (
                     <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-100 py-2 z-50">
+                      {/* Client verification quick link */}
+                      {role === 'client' && clientAuth?.user?.verification?.status && ['required','pending','rejected','unverified'].includes(clientAuth.user.verification.status) && (
+                        <Link
+                          to="/account/verification"
+                          className="block px-4 py-2 text-sm text-amber-700 hover:bg-amber-50 transition-colors duration-200"
+                          onClick={()=> setShowProfileMenu(false)}
+                        >
+                          {clientAuth.user.verification.status === 'verified' ? 'Verification' : 'Verify Account'}
+                        </Link>
+                      )}
                       {role === 'admin' && (
                         <>
                           <Link 
@@ -337,8 +482,9 @@ const Navbar = () => {
                             className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors duration-200" 
                             onClick={() => setShowProfileMenu(false)}
                           >
-                            💰 Negotiations
+                             Negotiations
                           </Link>
+                          
                         </>
                       )}
                       {role !== 'admin' && (
@@ -385,9 +531,17 @@ const Navbar = () => {
       </div>
 
       {/* Bottom Navigation Section */}
-      <div style={{backgroundColor: 'rgba(255, 255, 255, 0.95)'}} className="border-b border-gray-200">
+      <div 
+        style={{
+          backgroundColor: 'rgba(255, 255, 255, 0.95)',
+          transform: showBottomNav ? 'translateY(0)' : 'translateY(-100%)',
+          transition: 'transform 0.3s ease-in-out, opacity 0.3s ease-in-out',
+          opacity: showBottomNav ? 1 : 0,
+        }} 
+        className="border-b border-gray-200 backdrop-blur-sm"
+      >
         <div className="max-w-[85%] mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+          <div className="flex items-center justify-between h-24">
             
             {/* Left: Navigation Links */}
             <div className="hidden md:flex items-center space-x-1">
@@ -460,7 +614,7 @@ const Navbar = () => {
                         : 'text-gray-700 hover:bg-gray-100'
                     }`}
                   >
-                    💰 Negotiations
+                    Negotiations
                   </Link>
                 </>
               )}
@@ -474,6 +628,18 @@ const Navbar = () => {
                 }`}
               >
                 {t.deals}
+              </Link>
+
+              {/* Stores link placed directly after Negotiations */}
+              <Link 
+                to="/stores" 
+                className={`px-5 py-2 rounded-full text-base font-medium transition-all duration-200 ${
+                  isActive('/stores') 
+                    ? 'bg-green-600 text-white shadow-md' 
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                Stores
               </Link>
               
               <Link 
@@ -611,7 +777,7 @@ const Navbar = () => {
                         : 'text-gray-700 hover:bg-gray-100'
                     }`}
                   >
-                    💰 Negotiations
+                    Negotiations
                   </Link>
                 </>
               )}

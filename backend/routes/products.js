@@ -3,6 +3,18 @@ const Product = require('../models/Product');
 const cloudinary = require('../config/cloudinary');
 const router = express.Router();
 
+// GET /api/products/:id – fetch single product (public)
+router.get('/:id', async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id);
+    if (!product || product.isDeleted) return res.status(404).json({ error: 'Product not found' });
+    res.json(product);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // GET /api/products/vendor/:storeId – list products for a vendor (public)
 router.get('/vendor/:storeId', async (req, res) => {
   try {
@@ -15,13 +27,32 @@ router.get('/vendor/:storeId', async (req, res) => {
   }
 });
 
+const { validateBody } = require('../middleware/validate');
+const { incProductCreated } = require('../services/metrics');
+
+const { rateLimit } = require('../middleware/rateLimit');
+const createProductLimiter = rateLimit({ windowMs: 60*60*1000, max: 60 }); // 60 creates/hour/IP
+
 // POST /api/products – vendor adds a product
-router.post('/', async (req, res) => {
+router.post('/', createProductLimiter, validateBody({
+  vendorUid: { required: true, type: 'string' },
+  storeId: { required: true, type: 'string' },
+  businessName: { required: true, type: 'string' },
+  name: { required: true, type: 'string' },
+  category: { required: true, type: 'string' },
+  unitPrice: { required: true, type: 'number', min: 0 },
+  totalQty: { type: 'number', min: 0 }
+}), async (req, res) => {
   try {
     const { vendorUid, storeId, businessName, ...data } = req.body;
-    if (!vendorUid || !storeId || !businessName) {
-      return res.status(400).json({ error: 'vendorUid, storeId and businessName required' });
-    }
+    // Coerce numeric strings
+    ['unitPrice','offerPrice','totalQty','minOrderQty'].forEach(f => {
+      if (data[f] !== undefined && data[f] !== null && data[f] !== '') {
+        const n = Number(data[f]);
+        if (!Number.isNaN(n)) data[f] = n;
+      }
+    });
+  // Basic required fields enforced by validator above
     // Handle images – accept array of base64 strings or objects {data:"base64"}
     let imageUrls = [];
     if (Array.isArray(data.images)) {
@@ -45,8 +76,9 @@ router.post('/', async (req, res) => {
       }
     }
 
-    const saved = await Product.create({ vendorUid, storeId, businessName, ...data, images: imageUrls });
-    res.status(201).json(saved);
+  const saved = await Product.create({ vendorUid, storeId, businessName, ...data, images: imageUrls });
+  incProductCreated();
+  res.status(201).json(saved);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Could not save product' });

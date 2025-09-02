@@ -58,7 +58,8 @@ export const translations = {
       quantity: 'Quantity:',
       soldBy: 'Sold by',
       vendorSince: 'Vendor since',
-      storageTips: 'Storage Tips:'
+      storageTips: 'Storage Tips:',
+      addToCart: 'Add to Cart'
     },
     cart: {
       title: 'Your Cart',
@@ -74,7 +75,24 @@ export const translations = {
       remove: 'Remove',
       quantity: 'Quantity',
       price: 'Price',
-      total: 'Total'
+  total: 'Total',
+  deliveryFee: 'Delivery Fee',
+  deliveryOptions: 'Delivery Options',
+  lineTotal: 'Line Total',
+  negotiatedFee: 'Negotiated Delivery Fee',
+  save: 'Save',
+  addressNone: 'No delivery address selected',
+  addAddress: 'Add Address',
+  changeAddress: 'Change',
+  verificationNeeded: 'Verification Needed',
+  secureCheckout: 'Secure checkout. Your information is protected.'
+  ,undo: 'Undo',
+  itemRemoved: 'Item removed',
+  itemRestored: 'Item restored',
+  lowStock: 'Low stock',
+  outOfStock: 'Out of stock',
+  maxQuantity: 'Cannot exceed available stock',
+  minQuantity: 'Cannot go below minimum order'
   },
   navbar: {
       home: 'Home',
@@ -125,7 +143,24 @@ export const translations = {
       remove: 'মুছে ফেলুন',
       quantity: 'পরিমাণ',
       price: 'দাম',
-      total: 'মোট'
+  total: 'মোট',
+  deliveryFee: 'ডেলিভারি ফি',
+  deliveryOptions: 'ডেলিভারি অপশন',
+  lineTotal: 'লাইন মোট',
+  negotiatedFee: 'আলোচিত ডেলিভারি ফি',
+  save: 'সংরক্ষণ',
+  addressNone: 'কোন ডেলিভারি ঠিকানা দেয়া হয়নি',
+  addAddress: 'ঠিকানা যোগ করুন',
+  changeAddress: 'পরিবর্তন',
+  verificationNeeded: 'যাচাইকরণ প্রয়োজন',
+  secureCheckout: 'নিরাপদ চেকআউট। আপনার তথ্য সুরক্ষিত।'
+  ,undo: 'আনডু',
+  itemRemoved: 'আইটেম মুছে ফেলা হয়েছে',
+  itemRestored: 'আইটেম পুনরুদ্ধার হয়েছে',
+  lowStock: 'স্বল্প স্টক',
+  outOfStock: 'স্টক শেষ',
+  maxQuantity: 'উপলব্ধ স্টকের বেশি সম্ভব নয়',
+  minQuantity: 'ন্যূনতম অর্ডারের নিচে সম্ভব নয়'
     },
     featureCards: {
       empoweringFarmers: {
@@ -171,7 +206,8 @@ export const translations = {
       quantity: 'পরিমাণ:',
       soldBy: 'বিক্রেতা',
       vendorSince: 'বিক্রেতা যুক্ত হয়েছেন',
-      storageTips: 'সংরক্ষণের পরামর্শ:'
+      storageTips: 'সংরক্ষণের পরামর্শ:',
+      addToCart: 'কার্টে যোগ করুন'
     },
     navbar: {
       home: 'হোম',

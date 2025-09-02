@@ -24,19 +24,23 @@ const UserProfile = lazy(() => import('../user/UserProfile'));
 const VendorProducts = lazy(() => import('../vendor/VendorProducts'));
 const VendorDashboard = lazy(() => import('../vendor/VendorDashboard'));
 const VendorProfileCompletion = lazy(() => import('../vendor/VendorProfileCompletion'));
+const StoreFront = lazy(() => import('../store/StoreFront'));
+const ProductDetail = lazy(() => import('../ProductDetail'));
 const VendorOrders = lazy(() => import('../vendor/VendorOrders'));
 const BarterManagement = lazy(() => import('../vendor/BarterManagement'));
 const MyOrders = lazy(() => import('../orders/MyOrders'));
 const OrderDetails = lazy(() => import('../orders/OrderDetails'));
 const Settings = lazy(() => import('../settings/Settings'));
 const AddressBook = lazy(() => import('../settings/AddressBook'));
-const NegotiationDashboard = lazy(() => import('../negotiation/NegotiationDashboard'));
+const NegotiationDashboard = lazy(() => import('../negotiation/NegotiationDashboard.jsx'));
 const PaymentSuccess = lazy(() => import('../payment/PaymentSuccess'));
 const PaymentFailed = lazy(() => import('../payment/PaymentFailed'));
 const PaymentCancel = lazy(() => import('../payment/PaymentCancel'));
 const SearchResults = lazy(() => import('../SearchResults'));
 const AdminLogin = lazy(() => import('../admin/AdminLogin'));
 const PlantDiseaseDetector = lazy(() => import('../PlantDiseaseDetector'));
+const VerificationPage = lazy(() => import('../verification/VerificationPage'));
+const DiscoverStoresPage = lazy(()=> import('../store/DiscoverStoresPage'));
 
 // Components that don't need loading (simple/lightweight)
 import ProtectedRoute from '../auth/ProtectedRoute';
@@ -70,6 +74,11 @@ const AppRoutes = () => {
         } />
         
         <Route path="/shops" element={<h1>Shops</h1>} />
+        <Route path="/stores" element={
+          <Suspense fallback={<LoadingFallback message="Loading stores..." />}>
+            <DiscoverStoresPage />
+          </Suspense>
+        } />
         
         <Route path="/plant-disease" element={
           <Suspense fallback={<LoadingFallback message="Loading disease detector..." />}>
@@ -122,6 +131,18 @@ const AppRoutes = () => {
         <Route path="/messages" element={
           <Suspense fallback={<LoadingFallback message="Loading messages..." />}>
             <VendorAuthProvider><ProtectedRoute element={<MessagingInterface />} /></VendorAuthProvider>
+          </Suspense>
+        } />
+
+        <Route path="/store/:storeId" element={
+          <Suspense fallback={<LoadingFallback message="Loading store..." />}>
+            <StoreFront />
+          </Suspense>
+        } />
+
+        <Route path="/product/:id" element={
+          <Suspense fallback={<LoadingFallback message="Loading product..." />}>
+            <ProductDetail />
           </Suspense>
         } />
         
@@ -236,6 +257,12 @@ const AppRoutes = () => {
         <Route path="/orders/:orderNumber" element={
           <Suspense fallback={<LoadingFallback message="Loading order details..." />}>
             <VendorAuthProvider><ProtectedRoute element={<OrderDetails />} /></VendorAuthProvider>
+          </Suspense>
+        } />
+
+        <Route path="/account/verification" element={
+          <Suspense fallback={<LoadingFallback message="Loading verification..." />}>
+            <VendorAuthProvider><ProtectedRoute element={<VerificationPage />} /></VendorAuthProvider>
           </Suspense>
         } />
         

@@ -5,10 +5,21 @@ const Cart = require('../models/Cart');
 const User = require('../models/User');
 const Vendor = require('../models/Vendor');
 const { protect } = require('../middleware/auth');
+const { validateBody } = require('../middleware/validate');
+const { record: recordAudit } = require('../services/auditService');
+const { scoreOrderContext } = require('../services/riskScoringService');
+const { evaluateRules } = require('../services/ruleEngine');
 const DeviceFingerprintService = require('../services/deviceFingerprintService');
 
+const { rateLimit } = require('../middleware/rateLimit');
+// pdfkit will be required lazily inside invoice endpoint to avoid startup crash if not installed
+// Limit checkouts: 30 per 15 minutes per user/IP (basic)
+const checkoutLimiter = rateLimit({ windowMs: 15*60*1000, max: 30, keyGenerator: (req) => req.user ? `checkout:${req.user.id}` : req.ip });
+
 // Create order from cart (checkout) with fraud detection
-router.post('/checkout', protect, async (req, res) => {
+router.post('/checkout', protect, checkoutLimiter, validateBody({
+  paymentMethod: { required: true, type: 'string' }
+}), async (req, res) => {
   try {
     const { paymentMethod, notes = '', specialInstructions = '' } = req.body;
     
@@ -25,6 +36,17 @@ router.post('/checkout', protect, async (req, res) => {
     }
     
     const uid = userDoc.uid;
+
+    // Enforce ban / verification for client users
+    if (req.user.role === 'client') {
+      if (userDoc.banned) {
+        return res.status(403).json({ success:false, message: 'Account banned. Contact support.', code:'BANNED' });
+      }
+      const vStatus = userDoc.verification?.status;
+      if (['required','pending','rejected'].includes(vStatus)) {
+        return res.status(403).json({ success:false, message: vStatus === 'required' ? 'Verification required before purchase.' : vStatus === 'pending' ? 'Verification under review.' : 'Verification rejected. Resubmit required.', code:'VERIFICATION_BLOCK', verificationStatus: vStatus });
+      }
+    }
 
     // Validate payment method
     const validPaymentMethods = ['cod', 'card', 'mobile-banking', 'bank-transfer'];
@@ -44,6 +66,33 @@ router.post('/checkout', protect, async (req, res) => {
         success: false, 
         message: 'Cart is empty' 
       });
+    }
+
+    // Prevent vendors from purchasing their own products (self-purchase / fake sales)
+    // Also prevent if user (vendor role) tries to buy any product they own
+    if (req.user.role === 'vendor') {
+      const selfOwnedItems = cart.items.filter(it => it.product && it.product.vendorUid === uid);
+      if (selfOwnedItems.length > 0) {
+        // Audit the attempt
+        recordAudit({
+          type: 'self_purchase_attempt',
+          actorId: uid,
+          actorRole: req.user.role,
+          ip: req.ip,
+          requestId: req.requestId,
+          resourceType: 'Cart',
+          resourceId: cart._id.toString(),
+          meta: {
+            productIds: selfOwnedItems.map(i => i.productId),
+            count: selfOwnedItems.length
+          }
+        });
+        return res.status(400).json({
+          success: false,
+          message: 'Vendors cannot purchase their own products',
+          products: selfOwnedItems.map(i => ({ id: i.productId, name: i.name }))
+        });
+      }
     }
 
     // Validate cart has required information
@@ -76,7 +125,7 @@ router.post('/checkout', protect, async (req, res) => {
     const orderNumbers = [];
     let totalOrderValue = 0;
 
-    for (const [vendorUid, items] of Object.entries(itemsByVendor)) {
+  for (const [vendorUid, items] of Object.entries(itemsByVendor)) {
       // Find vendor
       const vendor = await Vendor.findOne({ uid: vendorUid });
       if (!vendor) {
@@ -112,7 +161,7 @@ router.post('/checkout', protect, async (req, res) => {
       );
 
       // Create order for this vendor with enhanced fraud detection
-      const { order, fraudFlags } = await Order.createFromCart(
+  const { order, fraudFlags } = await Order.createFromCart(
         vendorCart, 
         paymentMethod, 
         securityReport.securityInfo, 
@@ -132,6 +181,61 @@ router.post('/checkout', protect, async (req, res) => {
         
         await order.save();
       }
+
+      // Additional consolidated risk scoring (combine contextual + device + base indicators)
+      const quantityTotal = items.reduce((t, i) => t + i.quantity, 0);
+      const deviceReuse = securityReport.deviceReuseAnalysis;
+      const ipReuseUsers = deviceReuse ? deviceReuse.userCount : 0; // simplification
+      const userRecentOrders = fraudFlags.filter(f => f.type === 'rapid_ordering');
+      const ctxScore = scoreOrderContext({
+        total: order.total,
+        subtotal: order.subtotal,
+        itemCount: order.items.length,
+        quantityTotal,
+        userOrderCount24h: userRecentOrders.length ? (userRecentOrders[0].count || userRecentOrders.length) : 0,
+        deviceReuse,
+        ipReuseUsers,
+        flags: fraudFlags
+      });
+
+      // Rule engine evaluation context (flatten relevant fields)
+      const ruleContext = {
+        total: order.total,
+        subtotal: order.subtotal,
+        itemCount: order.items.length,
+        quantityTotal,
+        uid: order.uid,
+        vendorId: order.vendor?.toString(),
+        role: order.role,
+        riskScore: order.securityInfo?.riskScore || ctxScore.score,
+        velocity: order.velocity,
+        negotiated: order.negotiated,
+        ip: securityReport.securityInfo?.ipAddress,
+        deviceFingerprint: securityReport.securityInfo?.deviceFingerprint,
+        flags: fraudFlags.map(f=>f.type)
+      };
+      let ruleEval = { applied:[], extraRisk:0, addedReasons:[], addedFlags:[], requireApproval:false };
+      try { ruleEval = await evaluateRules(ruleContext); } catch(e) { console.warn('Rule evaluation failed', e.message); }
+
+      // Merge reasons: contextual + existing + device analysis derived reasons
+  const reasons = new Set([...(order.securityInfo.riskReasons||[]), ...ctxScore.reasons, ...ruleEval.addedReasons]);
+  if (securityReport.riskScore >= 50) reasons.add('DEVICE_SECURITY_RISK');
+      if (deviceReuse?.deviceReused) reasons.add('DEVICE_REUSE_OBSERVED');
+      if (deviceReuse?.userCount > 5) reasons.add('DEVICE_SHARED_WIDELY');
+  ruleEval.applied.forEach(rn => reasons.add(`RULE_${rn.toUpperCase().replace(/[^A-Z0-9]+/g,'_')}`));
+
+      // Combine scores (not just max) but keep cap for unrealistic inflation
+      const combinedScore = Math.min((securityReport.riskScore || 0) + ctxScore.score + ruleEval.extraRisk, 200);
+      order.securityInfo.riskScore = combinedScore;
+      order.securityInfo.riskLevel = combinedScore < 30 ? 'low' : combinedScore < 60 ? 'medium' : combinedScore < 90 ? 'high' : 'critical';
+      order.securityInfo.riskReasons = Array.from(reasons);
+      if (ruleEval.addedFlags.length) {
+        order.suspiciousFlags.push(...ruleEval.addedFlags);
+        order.requiresApproval = order.requiresApproval || ruleEval.requireApproval;
+      } else if (ruleEval.requireApproval) {
+        order.requiresApproval = true;
+      }
+      await order.save();
 
       orders.push(order);
       orderNumbers.push(order.orderNumber);
@@ -157,7 +261,7 @@ router.post('/checkout', protect, async (req, res) => {
     const requiresApproval = orders.some(order => order.requiresApproval);
     const totalFraudFlags = orders.reduce((total, order) => total + order.suspiciousFlags.length, 0);
 
-    res.json({
+  res.json({
       success: true,
       message: requiresApproval 
         ? 'Orders submitted for admin review due to security flags'
@@ -180,9 +284,32 @@ router.post('/checkout', protect, async (req, res) => {
         estimatedDelivery: order.estimatedDelivery,
         vendor: order.vendor,
         requiresApproval: order.requiresApproval,
-        suspiciousFlags: order.suspiciousFlags.length
+  suspiciousFlags: order.suspiciousFlags.length,
+  riskScore: order.securityInfo?.riskScore,
+  riskLevel: order.securityInfo?.riskLevel,
+  riskReasons: order.securityInfo?.riskReasons
       }))
     });
+
+    // Audit each order created
+    for (const o of orders) {
+      recordAudit({
+        type: 'order_created',
+        actorId: uid,
+        actorRole: req.user.role,
+        ip: req.ip,
+        requestId: req.requestId,
+        resourceType: 'Order',
+        resourceId: o._id.toString(),
+        meta: {
+          orderNumber: o.orderNumber,
+          total: o.total,
+            riskScore: o.securityInfo?.riskScore,
+          flags: o.suspiciousFlags.length,
+          requiresApproval: o.requiresApproval
+        }
+      });
+    }
 
   } catch (error) {
     console.error('Checkout error:', error);
@@ -284,6 +411,58 @@ router.get('/:orderNumber', protect, async (req, res) => {
       success: false, 
       message: 'Failed to fetch order' 
     });
+  }
+});
+
+// Download invoice PDF
+router.get('/:orderNumber/invoice', protect, async (req, res) => {
+  try {
+    // Lazy require
+    let PDFDocument;
+    try { PDFDocument = require('pdfkit'); } catch (e) {
+      return res.status(500).json({ success:false, message:'Invoice generator not available (pdfkit not installed).' });
+    }
+    const { orderNumber } = req.params;
+    const userDoc = req.user.role === 'client'
+      ? await User.findById(req.user.id)
+      : await Vendor.findById(req.user.id);
+    if (!userDoc || !userDoc.uid) {
+      return res.status(400).json({ success:false, message:'User not found' });
+    }
+    const uid = userDoc.uid;
+    const order = await Order.findOne({ orderNumber, uid });
+    if (!order) return res.status(404).json({ success:false, message:'Order not found' });
+    // Basic authorization already by uid; vendors can only access their portion via vendor route; allow here for simplicity
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=invoice-${order.orderNumber}.pdf`);
+    const doc = new PDFDocument({ margin: 50 });
+    doc.pipe(res);
+    doc.fontSize(18).text('Invoice', { align: 'center' });
+    doc.moveDown();
+    doc.fontSize(12).text(`Order: ${order.orderNumber}`);
+    doc.text(`Date: ${new Date(order.orderedAt).toLocaleString()}`);
+    doc.text(`Status: ${order.status}`);
+    doc.moveDown();
+    doc.fontSize(14).text('Bill To');
+    const a = order.deliveryAddress || {};
+    doc.fontSize(10).text(`${a.name || ''}`);
+    doc.text(`${a.addressLine1 || ''}`);
+    doc.text(`${a.city || ''}, ${a.state || ''} ${a.zip || ''}`);
+    doc.moveDown();
+    doc.fontSize(14).text('Items');
+    doc.moveDown(0.5);
+    order.items.forEach(it => {
+      doc.fontSize(10).text(`${it.name} (x${it.quantity}) - ${(it.price || 0).toFixed(2)}`);
+    });
+    doc.moveDown();
+    doc.fontSize(12).text(`Subtotal: ${order.subtotal.toFixed(2)}`);
+    doc.text(`Delivery: ${order.deliveryFee.toFixed(2)}`);
+    if (order.discount) doc.text(`Discount: -${order.discount.toFixed(2)}`);
+    doc.fontSize(14).text(`Total: ${order.total.toFixed(2)}`);
+    doc.end();
+  } catch (e) {
+    console.error('Invoice generation error', e);
+    res.status(500).json({ success:false, message:'Failed to generate invoice' });
   }
 });
 

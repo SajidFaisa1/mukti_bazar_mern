@@ -142,6 +142,97 @@ class NegotiationService {
     }
   }
 
+  // Checkout accepted negotiation (COD or online)
+  async checkoutNegotiation(negotiationId, { paymentMethod = 'cod', addressId, notes = '', specialInstructions = '', deviceFingerprint, deliveryMethod, negotiatedFee, deliveryNotes } = {}) {
+    try {
+      // Acquire auth token similar to cart context
+      let token = localStorage.getItem('clientToken') || sessionStorage.getItem('vendorToken');
+      if (!token) throw new Error('Authentication required');
+
+      const response = await fetch(`${API_BASE_URL}/negotiations/${negotiationId}/checkout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+  body: JSON.stringify({ paymentMethod, addressId, notes, specialInstructions, deviceFingerprint, deliveryMethod, negotiatedFee, deliveryNotes })
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ message: 'Checkout failed' }));
+        throw new Error(err.message || err.error || 'Negotiation checkout failed');
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('Error checking out negotiation:', error);
+      throw error;
+    }
+  }
+
+  // Fetch delivery methods for accepted negotiation
+  async getNegotiationDeliveryMethods(negotiationId) {
+    try {
+      const token = localStorage.getItem('clientToken') || sessionStorage.getItem('vendorToken');
+      if (!token) throw new Error('Authentication required');
+      const res = await fetch(`${API_BASE_URL}/negotiations/${negotiationId}/delivery-methods`, { headers: { 'Authorization': `Bearer ${token}` } });
+      if (!res.ok) throw new Error('Failed to load delivery methods');
+      return await res.json();
+    } catch (e) {
+      console.error('Error fetching negotiation delivery methods:', e);
+      throw e;
+    }
+  }
+
+  // Calculate delivery fee for chosen method
+  async calculateNegotiationDelivery(negotiationId, deliveryMethod, negotiatedFee = 0) {
+    try {
+      const token = localStorage.getItem('clientToken') || sessionStorage.getItem('vendorToken');
+      if (!token) throw new Error('Authentication required');
+      const res = await fetch(`${API_BASE_URL}/negotiations/${negotiationId}/calculate-delivery`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ deliveryMethod, negotiatedFee })
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(()=>({ error: 'Failed to calculate fee' }));
+        throw new Error(err.error || 'Failed to calculate fee');
+      }
+      return await res.json();
+    } catch (e) {
+      console.error('Error calculating negotiation delivery fee:', e);
+      throw e;
+    }
+  }
+
+  // Fetch addresses for current authenticated user (used before checkout)
+  async getAddresses() {
+    try {
+      const token = localStorage.getItem('clientToken') || sessionStorage.getItem('vendorToken');
+      if (!token) throw new Error('Authentication required');
+      const response = await fetch(`${API_BASE_URL}/addresses`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!response.ok) {
+        throw new Error('Failed to load addresses');
+      }
+      return await response.json();
+    } catch (e) {
+      console.error('Error fetching addresses:', e);
+      throw e;
+    }
+  }
+
+  // (Optional) helper to get default address quickly
+  async getDefaultAddress(uid) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/addresses/default/${uid}`);
+      if (response.ok) return await response.json();
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   // Cancel negotiation
   async cancelNegotiation(negotiationId, uid) {
     try {

@@ -5,6 +5,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const Admin = require('../models/Admin');
+const CarouselSlide = require('../models/CarouselSlide');
 const { protect, adminOnly } = require('../middleware/auth');
 const cloudinary = require('../config/cloudinary');
 const router = express.Router();
@@ -236,6 +237,100 @@ router.delete('/logo', protect, adminOnly, async (req, res) => {
   } catch (error) {
     console.error('Error resetting logo:', error);
     res.status(500).json({ error: 'Failed to reset logo' });
+  }
+});
+
+// GET /api/admin/carousel - list slides
+router.get('/carousel', protect, adminOnly, async (req, res) => {
+  try {
+    const slides = await CarouselSlide.find().sort({ order: 1, createdAt: 1 });
+    res.json({ success: true, slides });
+  } catch (err) {
+    console.error('Fetch carousel slides error:', err);
+    res.status(500).json({ error: 'Failed to fetch slides' });
+  }
+});
+
+// POST /api/admin/carousel - create slide (multipart form: image, title, tagline, order)
+router.post('/carousel', protect, adminOnly, upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Image required' });
+
+    // Upload to Cloudinary
+    const uploadRes = await cloudinary.uploader.upload(req.file.path, { folder: 'carousel' });
+
+    const { title = '', tagline = '', order } = req.body;
+    const slide = await CarouselSlide.create({
+      imageUrl: uploadRes.secure_url,
+      publicId: uploadRes.public_id,
+      title,
+      tagline,
+      order: order !== undefined ? Number(order) : undefined
+    });
+
+    res.status(201).json({ success: true, slide });
+  } catch (err) {
+    console.error('Create carousel slide error:', err);
+    res.status(500).json({ error: 'Failed to create slide' });
+  }
+});
+
+// PUT /api/admin/carousel/:id - update text/order or replace image
+router.put('/carousel/:id', protect, adminOnly, upload.single('image'), async (req, res) => {
+  try {
+    const slide = await CarouselSlide.findById(req.params.id);
+    if (!slide) return res.status(404).json({ error: 'Slide not found' });
+
+    if (req.file) {
+      // Replace image in Cloudinary
+      try {
+        if (slide.publicId) await cloudinary.uploader.destroy(slide.publicId);
+      } catch (e) { console.warn('Cloudinary destroy old slide failed:', e.message); }
+      const uploadRes = await cloudinary.uploader.upload(req.file.path, { folder: 'carousel' });
+      slide.imageUrl = uploadRes.secure_url;
+      slide.publicId = uploadRes.public_id;
+    }
+
+    const { title, tagline, order, active } = req.body;
+    if (title !== undefined) slide.title = title;
+    if (tagline !== undefined) slide.tagline = tagline;
+    if (active !== undefined) slide.active = active === 'true' || active === true;
+    if (order !== undefined) slide.order = Number(order);
+
+    await slide.save();
+    res.json({ success: true, slide });
+  } catch (err) {
+    console.error('Update carousel slide error:', err);
+    res.status(500).json({ error: 'Failed to update slide' });
+  }
+});
+
+// DELETE /api/admin/carousel/:id - delete slide
+router.delete('/carousel/:id', protect, adminOnly, async (req, res) => {
+  try {
+    const slide = await CarouselSlide.findById(req.params.id);
+    if (!slide) return res.status(404).json({ error: 'Slide not found' });
+
+    try {
+      if (slide.publicId) await cloudinary.uploader.destroy(slide.publicId);
+    } catch (e) { console.warn('Cloudinary destroy failed:', e.message); }
+
+    await slide.deleteOne();
+    res.json({ success: true, message: 'Slide deleted' });
+  } catch (err) {
+    console.error('Delete carousel slide error:', err);
+    res.status(500).json({ error: 'Failed to delete slide' });
+  }
+});
+
+// PUBLIC: GET /api/admin/carousel/public - active slides for all users
+router.get('/carousel/public', async (req, res) => {
+  try {
+    const slides = await CarouselSlide.find({ active: true }).sort({ order: 1, createdAt: 1 });
+    res.json({ success: true, slides });
+  } catch (err) {
+    console.error('Public fetch carousel slides error:', err);
+    res.status(500).json({ error: 'Failed to fetch slides' });
   }
 });
 

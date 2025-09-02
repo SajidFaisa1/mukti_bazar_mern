@@ -410,9 +410,15 @@ router.get('/unread-count', async (req, res) => {
       return res.status(400).json({ error: 'uid and role are required' });
     }
     
-    // Get the user's ObjectId from the UID
-    const userModel = role === 'vendor' ? 'Vendor' : 'User';
-    const UserModelClass = userModel === 'vendor' ? require('../models/Vendor') : require('../models/User');
+  // Get the user's ObjectId from the UID
+  // NOTE: Previously this incorrectly did:
+  //   const userModel = role === 'vendor' ? 'Vendor' : 'User';
+  //   const UserModelClass = userModel === 'vendor' ? Vendor : User;
+  // Which fails for vendors because userModel === 'Vendor' (capital V) never equals 'vendor'.
+  // Result: It loaded the User model, could not find the vendor by uid, returned 404 and the
+  // unread count endpoint broke for vendors. Fix by keying directly off role.
+  const userModel = role === 'vendor' ? 'Vendor' : 'User';
+  const UserModelClass = role === 'vendor' ? require('../models/Vendor') : require('../models/User');
     const user = await UserModelClass.findOne({ uid: uid });
     
     if (!user) {

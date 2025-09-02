@@ -15,6 +15,18 @@ router.get('/', protect, adminOnly, async (req, res) => {
   }
 });
 
+// GET /api/users/by-uid/:uid (admin only)
+router.get('/by-uid/:uid', protect, adminOnly, async (req, res) => {
+  try {
+    const user = await User.findOne({ uid: req.params.uid }).select('-password');
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json({ user });
+  } catch (e) {
+    console.error('User lookup error', e);
+    res.status(500).json({ error: 'Lookup failed' });
+  }
+});
+
 // POST /api/users/signup – minimal client registration
 router.post('/signup', async (req, res) => {
   try {

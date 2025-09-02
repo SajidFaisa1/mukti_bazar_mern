@@ -35,10 +35,21 @@ const groupAnnouncementRoutes = require('./routes/groupAnnouncements');
 const aiChatRoutes = require('./routes/aiChat');
 const bulkMessageRoutes = require('./routes/bulkMessages');
 const negotiationRoutes = require('./routes/negotiation');
+const auditRoutes = require('./routes/audit');
 const notificationRoutes = require('./routes/notification');
 const plantDiseaseRoutes = require('./routes/plantDisease');
+const userModerationRoutes = require('./routes/userModeration');
+const homeSummaryRoutes = require('./routes/homeSummary');
+const feedbackRoutes = require('./routes/feedback');
 
 const app = express();
+// Middleware: request id & logging early
+const requestId = require('./middleware/requestId');
+const logRequests = require('./middleware/logRequests');
+const metricsRecorder = require('./middleware/metricsRecorder');
+app.use(requestId);
+app.use(logRequests);
+app.use(metricsRecorder);
 const server = http.createServer(app);
 
 // Initialize WebSocket server
@@ -82,7 +93,25 @@ wss.on('connection', (ws, req) => {
 });
 
 app.use(express.json({ limit: '10mb' }));
+// Health & metrics endpoints
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', time: new Date().toISOString() });
+});
+
+app.get('/metrics', async (req, res) => {
+  const { metricsText, enabled } = require('./services/metrics');
+  try {
+    const out = await metricsText();
+    res.setHeader('Content-Type', enabled ? 'text/plain; version=0.0.4' : 'text/plain');
+    res.send(out);
+  } catch (e) {
+    res.status(500).send('# metrics error');
+  }
+});
 app.use(cors());
+
+// Serve static uploads
+app.use('/uploads', express.static('uploads'));
 
 // Mount routers
 app.use('/api/vendors',  vendorRoutes);
@@ -105,9 +134,13 @@ app.use('/api/groups', groupAnnouncementRoutes);
 app.use('/api/bulk-messages', bulkMessageRoutes);
 app.use('/api/negotiations', negotiationRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/audit', auditRoutes);
 app.use('/api/plant-disease', plantDiseaseRoutes);
 app.use('/api/ai-chat', aiChatRoutes);
 app.use('/api/chat', aiChatRoutes);
+app.use('/api/user-moderation', userModerationRoutes);
+app.use('/api/home', homeSummaryRoutes);
+app.use('/api/feedback', feedbackRoutes);
 
 // Quick 410 for very old endpoints we deliberately removed
 ['/api/vendor/signup', '/api/client/signup'].forEach(path => {

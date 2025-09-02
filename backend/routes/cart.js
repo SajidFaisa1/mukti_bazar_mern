@@ -72,6 +72,18 @@ router.post('/uid/:uid/items', async (req, res) => {
       return res.status(404).json({ error: 'Product not found' });
     }
     
+    // Check user ban / verification restrictions
+    const userRecord = await User.findOne({ uid });
+    if (userRecord) {
+      if (userRecord.banned) {
+        return res.status(403).json({ error: 'Account banned. Cannot add items.', code: 'BANNED' });
+      }
+      const vStatus = userRecord.verification?.status;
+      if (['required','pending','rejected'].includes(vStatus)) {
+        return res.status(403).json({ error: vStatus === 'required' ? 'Verification required before adding items.' : vStatus === 'pending' ? 'Verification under review.' : 'Verification rejected. Resubmit required.', code: 'VERIFICATION_BLOCK', verificationStatus: vStatus });
+      }
+    }
+
     // Find or create cart
     let cart = await Cart.findOne({ uid });
     if (!cart) {

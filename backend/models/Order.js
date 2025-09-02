@@ -27,6 +27,30 @@ const orderSchema = new mongoose.Schema({
   
   // Order Items (snapshot from cart at checkout)
   items: [orderItemSchema],
+
+  // When created from a successful negotiation
+  negotiation: { type: mongoose.Schema.Types.ObjectId, ref: 'Negotiation' },
+  negotiated: {
+    isNegotiated: { type: Boolean, default: false },
+    negotiationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Negotiation' },
+    finalPrice: { type: Number },
+    finalQuantity: { type: Number },
+    agreedSubtotal: { type: Number },
+    agreedAt: { type: Date },
+    deltaPct: { type: Number }, // (original - final)/original *100
+    participants: {
+      buyerUid: { type: String },
+      sellerUid: { type: String }
+    }
+  },
+
+  // Multi-window user order velocity snapshot at creation time
+  velocity: {
+    last5m: { type: Number, default: 0 },
+    last1h: { type: Number, default: 0 },
+    last6h: { type: Number, default: 0 },
+    last24h: { type: Number, default: 0 }
+  },
   
   // Financial Information
   subtotal: { type: Number, required: true },
@@ -63,7 +87,8 @@ const orderSchema = new mongoose.Schema({
     
     // Risk assessment
     riskScore: { type: Number, default: 0 },
-    riskLevel: { type: String, enum: ['low', 'medium', 'high', 'critical'], default: 'low' }
+  riskLevel: { type: String, enum: ['low', 'medium', 'high', 'critical'], default: 'low' },
+  riskReasons: { type: [String], default: [] }
   },
   
   // Admin Approval System
@@ -169,6 +194,8 @@ orderSchema.index({ uid: 1, status: 1 });
 orderSchema.index({ orderNumber: 1 }, { unique: true });
 orderSchema.index({ user: 1, status: 1 });
 orderSchema.index({ vendor: 1, status: 1 });
+orderSchema.index({ negotiation: 1 });
+orderSchema.index({ 'negotiated.isNegotiated': 1 });
 orderSchema.index({ orderedAt: -1 }); // For recent orders
 orderSchema.index({ status: 1, orderedAt: -1 }); // For status-based queries
 orderSchema.index({ 'securityInfo.ipAddress': 1, orderedAt: -1 }); // For fraud detection
@@ -456,6 +483,22 @@ orderSchema.statics.createFromCart = async function(cart, paymentMethod, securit
     console.log(`Stock updated for ${product.name}: ${product.totalQty + item.quantity} -> ${product.totalQty}`);
   }
   
+  // Compute multi-window velocity for this uid
+  const now = new Date();
+  const windows = {
+    last5m: new Date(now.getTime() - 5*60*1000),
+    last1h: new Date(now.getTime() - 60*60*1000),
+    last6h: new Date(now.getTime() - 6*60*60*1000),
+    last24h: new Date(now.getTime() - 24*60*60*1000)
+  };
+  const previousOrders = await this.find({ uid: cart.uid, orderedAt: { $gte: windows.last24h } }).select('orderedAt');
+  const velocity = {
+    last5m: previousOrders.filter(o => o.orderedAt >= windows.last5m).length,
+    last1h: previousOrders.filter(o => o.orderedAt >= windows.last1h).length,
+    last6h: previousOrders.filter(o => o.orderedAt >= windows.last6h).length,
+    last24h: previousOrders.length
+  };
+
   const orderData = {
     user: cart.user,
     vendor: cart.vendor,
@@ -489,6 +532,8 @@ orderSchema.statics.createFromCart = async function(cart, paymentMethod, securit
     notes,
     specialInstructions
   };
+
+  orderData.velocity = velocity;
   
   const order = new this(orderData);
   

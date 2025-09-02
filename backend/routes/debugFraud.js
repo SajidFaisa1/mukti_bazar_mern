@@ -1,6 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const Order = require('../models/Order');
+const User = require('../models/User');
+const Vendor = require('../models/Vendor');
+const { scoreOrderContext } = require('../services/riskScoringService');
 const { protect, adminOnly } = require('../middleware/auth');
 
 // Debug specific order by order number
@@ -8,15 +11,22 @@ router.get('/order/:orderNumber', protect, adminOnly, async (req, res) => {
   try {
     const { orderNumber } = req.params;
     
-    const order = await Order.findOne({ orderNumber })
-      .populate('user', 'firstName lastName email uid')
-      .populate('vendor', 'businessName email');
+    let order = await Order.findOne({ orderNumber })
+      // Include legacy firstName/lastName if they ever exist plus unified name field
+      .populate('user', 'firstName lastName name email uid phone')
+      .populate('vendor', 'businessName sellerName email phone uid');
     
-    if (!order) {
+  if (!order) {
       return res.status(404).json({ error: 'Order not found' });
     }
     
-    // Get user's order history
+    // Fallback: hydrate missing user ref by uid
+    let fallbackUser = null;
+    if (!order.user && order.uid) {
+      fallbackUser = await User.findOne({ uid: order.uid }).select('firstName lastName name email phone uid');
+    }
+
+  // Get user's order history
     const userOrders = await Order.find({ uid: order.uid })
       .select('orderNumber total itemCount orderedAt suspiciousFlags requiresApproval securityInfo')
       .sort({ orderedAt: -1 })
@@ -35,6 +45,34 @@ router.get('/order/:orderNumber', protect, adminOnly, async (req, res) => {
     
     // Analyze why this order might not be flagged
     const totalQuantity = order.items?.reduce((total, item) => total + (item.quantity || 0), 0) || order.itemCount || 0;
+
+    // Dynamic contextual risk score recalculation (if missing or zero)
+    let dynamicRisk = null;
+    try {
+      const contextual = scoreOrderContext({
+        total: order.total,
+        subtotal: order.subtotal || order.total,
+        itemCount: order.items?.length || 0,
+        quantityTotal: totalQuantity,
+        userOrderCount24h: userOrders.filter(o => (Date.now() - new Date(o.orderedAt).getTime()) < 24*60*60*1000).length,
+        deviceReuse: null, // could be enriched by a separate query if needed
+        ipReuseUsers: 0,
+        flags: order.suspiciousFlags || []
+      });
+      // Prefer stored riskScore if non-zero else use contextual
+      const stored = order.securityInfo?.riskScore || 0;
+      if (!stored || stored === 0) {
+        order.securityInfo = order.securityInfo || {};
+        order.securityInfo.riskScore = contextual.score;
+        order.securityInfo.riskLevel = contextual.riskLevel;
+        order.securityInfo.riskReasons = contextual.reasons;
+        dynamicRisk = { recalculated: true, ...contextual };
+      } else {
+        dynamicRisk = { recalculated: false, storedScore: stored, storedLevel: order.securityInfo.riskLevel, reasons: order.securityInfo.riskReasons };
+      }
+    } catch (e) {
+      console.warn('Dynamic risk calculation failed', e.message);
+    }
     const analysis = {
       totalQuantity,
       totalValue: order.total,
@@ -82,11 +120,56 @@ router.get('/order/:orderNumber', protect, adminOnly, async (req, res) => {
       recommendations.push('🏃 Should be flagged for rapid ordering');
     }
     
+    // Device capture diagnostics
+    const sec = order.securityInfo || {};
+    const deviceCapture = {
+      ipAddress: sec.ipAddress || null,
+      deviceFingerprint: sec.deviceFingerprint || null,
+      userAgent: sec.userAgent || null,
+      hasDeviceInfo: !!sec.deviceInfo,
+      missing: []
+    };
+    if (!deviceCapture.ipAddress) deviceCapture.missing.push('ipAddress');
+    if (!deviceCapture.deviceFingerprint) deviceCapture.missing.push('deviceFingerprint');
+    if (!deviceCapture.userAgent) deviceCapture.missing.push('userAgent');
+    if (!deviceCapture.hasDeviceInfo) deviceCapture.missing.push('deviceInfo');
+
+    // Determine purchaser entity
+    let purchaserUser = null;
+    let purchaserVendor = null;
+    if (order.role === 'vendor') {
+      purchaserVendor = await Vendor.findOne({ uid: order.uid }).select('uid businessName sellerName email phone');
+    } else {
+      purchaserUser = order.user || fallbackUser;
+      if (purchaserUser) {
+        // Normalize a displayName for frontend
+        const first = purchaserUser.firstName || '';
+        const last = purchaserUser.lastName || '';
+        const combined = `${first} ${last}`.trim();
+        const fallbackName = purchaserUser.name || combined;
+        // Attach virtual style properties if missing
+        purchaserUser = purchaserUser.toObject ? purchaserUser.toObject() : purchaserUser;
+        purchaserUser.displayName = fallbackName;
+        if (!purchaserUser.firstName && !purchaserUser.lastName && purchaserUser.name) {
+          // Try to split name into first/last for existing UI references
+            const parts = purchaserUser.name.split(/\s+/);
+            purchaserUser.firstName = parts.shift();
+            purchaserUser.lastName = parts.join(' ');
+        }
+      }
+    }
+    const sellerVendor = order.vendor || null;
+
     res.json({
       success: true,
       order: {
         ...order.toJSON(),
-        analysis
+        purchaserUser,
+        purchaserVendor,
+        sellerVendor,
+        analysis,
+        dynamicRisk,
+        deviceCapture
       },
       userOrders,
       deviceOrders,
@@ -117,7 +200,7 @@ router.get('/recent-orders', protect, adminOnly, async (req, res) => {
     }
     
     const orders = await Order.find(baseFilter)
-      .populate('user', 'firstName lastName email uid')
+      .populate('user', 'firstName lastName name email uid')
       .select('orderNumber total itemCount orderedAt suspiciousFlags requiresApproval securityInfo uid items')
       .sort({ orderedAt: -1 })
       .limit(parseInt(limit));
@@ -125,7 +208,28 @@ router.get('/recent-orders', protect, adminOnly, async (req, res) => {
     // Process each order for better analysis
     const processedOrders = orders.map(order => {
       const totalQuantity = order.items?.reduce((total, item) => total + (item.quantity || 0), 0) || 0;
-      
+      let riskScore = order.securityInfo?.riskScore || 0;
+      let riskLevel = order.securityInfo?.riskLevel || 'unknown';
+      let recalculated = false;
+      let riskReasons = order.securityInfo?.riskReasons || [];
+      if (!riskScore || riskScore === 0) {
+        try {
+          const ctx = scoreOrderContext({
+            total: order.total,
+            subtotal: order.subtotal || order.total,
+            itemCount: order.items?.length || 0,
+            quantityTotal: totalQuantity,
+            userOrderCount24h: 0,
+            deviceReuse: null,
+            ipReuseUsers: 0,
+            flags: order.suspiciousFlags || []
+          });
+          riskScore = ctx.score;
+          riskLevel = ctx.riskLevel;
+          riskReasons = ctx.reasons;
+          recalculated = true;
+        } catch (e) { /* ignore */ }
+      }
       return {
         orderNumber: order.orderNumber,
         total: order.total,
@@ -136,11 +240,12 @@ router.get('/recent-orders', protect, adminOnly, async (req, res) => {
         flagCount: order.suspiciousFlags?.length || 0,
         flagTypes: order.suspiciousFlags?.map(f => f.type) || [],
         hasDevice: !!order.securityInfo?.deviceFingerprint,
-        riskLevel: order.securityInfo?.riskLevel || 'unknown',
-        customer: order.user ? `${order.user.firstName} ${order.user.lastName}` : 'Unknown',
+        riskLevel,
+        riskScore,
+        riskReasons,
+        recalculated,
+  customer: order.user ? ((order.user.firstName || order.user.lastName) ? `${order.user.firstName||''} ${order.user.lastName||''}`.trim() : (order.user.name || 'Unknown')) : 'Unknown',
         uid: order.uid,
-        
-        // Analysis flags
         shouldBeFlagged: {
           highValue: order.total > 15000,
           bulkQuantity: totalQuantity > 20,

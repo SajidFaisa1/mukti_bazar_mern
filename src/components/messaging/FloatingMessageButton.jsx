@@ -100,8 +100,8 @@ const FloatingMessageButton = () => {
     };
   }, [currentUser?.uid]);
 
-  // Don't show if on messaging page
-  if (window.location.pathname === '/messages') {
+  // Hide for vendors (inline button now in modal) or on messaging page
+  if (currentRole === 'vendor' || window.location.pathname === '/messages') {
     return null;
   }
 

@@ -1,5 +1,26 @@
 const mongoose = require('mongoose');
 
+// Structured address schema (backward compatible)
+const AddressSchema = new mongoose.Schema({
+  division: { type: String, default: '' },
+  district: { type: String, default: '' },
+  upazila: { type: String, default: '' }, // previously not stored
+  union: { type: String, default: '' },
+  city: { type: String, default: '' },
+  region: { type: String, default: '' }, // legacy
+  postalCode: { type: String, default: '' },
+  // Optional geo coordinates (Point: [lng, lat])
+  geo: {
+    type: {
+      type: String,
+      enum: ['Point'],
+      default: 'Point'
+    },
+    coordinates: { type: [Number], default: [0, 0] },
+    accuracyMeters: { type: Number }
+  }
+}, { _id: false });
+
 const vendorSchema = new mongoose.Schema(
   {
     uid: { type: String },
@@ -12,15 +33,8 @@ const vendorSchema = new mongoose.Schema(
     
     // Address information (updated structure)
     address: { 
-      type: Object, 
-      default: { 
-        division: '', 
-        district: '', 
-        union: '',
-        // Legacy fields for backward compatibility
-        region: '', 
-        city: ''
-      } 
+      type: AddressSchema, 
+      default: () => ({})
     },
     
     // Document storage
@@ -118,6 +132,10 @@ const vendorSchema = new mongoose.Schema(
     lastSecurityCheck: { type: Date, default: Date.now },
     fraudFlags: { type: [String], default: [] }, // Array of fraud indicators
     trustScore: { type: Number, default: 50, min: 0, max: 100 } // Overall trust score
+  ,
+  // Store rating aggregates
+  storeRatingAvg: { type: Number, default: 0, min: 0, max: 5 },
+  storeRatingCount: { type: Number, default: 0, min: 0 }
 
   },
   { timestamps: true }
@@ -226,6 +244,21 @@ vendorSchema.methods.submitProfile = function() {
   this.verificationStatus = this.requiresManualReview ? 'under_review' : 'under_review';
   return this.save();
 };
+
+// Virtual human-readable location
+vendorSchema.virtual('displayLocation').get(function () {
+  if (!this.address) return '';
+  const parts = [
+    this.address.union,
+    this.address.upazila || this.address.city,
+    this.address.district,
+    this.address.division
+  ].filter(Boolean);
+  return parts.join(', ');
+});
+
+// Geospatial index if coordinates provided
+vendorSchema.index({ 'address.geo': '2dsphere' });
 
 // Pre-save middleware to ensure verification level is calculated
 vendorSchema.pre('save', function(next) {

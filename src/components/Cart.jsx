@@ -2,29 +2,34 @@
 import { useCart } from "../contexts/CartContext"
 import { Link, useNavigate } from "react-router-dom"
 import { useTranslation } from "react-i18next"
-import { ShoppingCart, Trash2, Minus, Plus, ArrowLeft, Package, Truck, CreditCard, X, ShoppingBag, MapPin, User } from "lucide-react"
-import { useState, useEffect, useCallback, useRef } from "react"
+import { ShoppingBag, X, ArrowLeft } from "lucide-react"
+import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from "react"
 import AddAddressModal from "./settings/AddAddressModal"
 import { useVendorAuth } from "../contexts/VendorAuthContext"
 import { useClientAuth } from "../contexts/ClientAuthContext"
-import "./Cart.css"
+// Tailwind refactor: legacy CSS removed
+import CartVerificationNotice from './cart/CartVerificationNotice'
+const VerificationUpload = lazy(() => import('./verification/VerificationUpload'))
+import CartHeader from './cart/CartHeader'
+import CartItem from './cart/CartItem'
+import CartSummary from './cart/CartSummary'
+import useCartDelivery from '../hooks/useCartDelivery'
+import { useToast } from './ui/ToastProvider'
 
 const ModernCart = () => {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const { 
     cart, 
-    removeFromCart, 
+  removeFromCart, 
+  reAddItem,
     updateQuantity, 
     clearCart, 
     cartTotal, 
     itemCount, 
     loading, 
     error, 
-    updateDeliveryAddress,
-    getDeliveryMethods,
-    calculateDeliveryFee,
-    updateDeliveryDetails
+    updateDeliveryAddress
   } = useCart()
   
   // Use auth contexts
@@ -32,29 +37,31 @@ const ModernCart = () => {
   const clientAuth = useClientAuth() || {}
   
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false)
+  const [showVerificationUpload, setShowVerificationUpload] = useState(false)
+  const [verificationStatus, setVerificationStatus] = useState(null)
   const [currentUser, setCurrentUser] = useState(null)
   const [loadingAddress, setLoadingAddress] = useState(false)
   
-  // Delivery states
-  const [deliveryMethods, setDeliveryMethods] = useState([])
-  const [selectedDeliveryMethod, setSelectedDeliveryMethod] = useState('')
-  const [deliveryFee, setDeliveryFee] = useState(0)
-  const [totalWeight, setTotalWeight] = useState(0)
-  const [loadingDelivery, setLoadingDelivery] = useState(false)
-  const [loadingDeliveryMethods, setLoadingDeliveryMethods] = useState(false)
-  const [negotiatedFee, setNegotiatedFee] = useState(0)
-  
-  // Lazy update states
-  const [pendingUpdates, setPendingUpdates] = useState({
-    deliveryMethod: null,
-    deliveryFee: null,
-    negotiatedFee: null,
-    needsUpdate: false
-  })
-  
-  // Debounce ref for negotiated fee updates
-  const negotiatedFeeTimeoutRef = useRef(null)
-  const deliveryFeeTimeoutRef = useRef(null)
+  // Delivery logic extracted to hook
+  const {
+    deliveryMethods,
+    selectedDeliveryMethod,
+    deliveryFee,
+    negotiatedFee,
+    totalWeight,
+    loadingDeliveryMethods,
+    feeLoading,
+    pendingUpdates,
+    handleDeliveryMethodChange,
+    handleNegotiatedFeeChange,
+    savePendingUpdates,
+    setSelectedDeliveryMethod,
+    setNegotiatedFee,
+    setDeliveryFee
+  } = useCartDelivery(cart)
+
+  const toast = useToast()
+  const removedItemRef = useRef(null)
 
   // Get delivery address from cart or fetch default if cart doesn't have one
   useEffect(() => {
@@ -91,7 +98,13 @@ const ModernCart = () => {
           }
         }
         
-        console.log('Final userInfo:', userInfo, 'Role:', userRole)
+        // Derive verification status for clients
+        let vStatus = null
+        if (userRole === 'client') {
+          const rawStatus = userInfo?.verification?.status
+          if (['required','pending','rejected'].includes(rawStatus)) vStatus = rawStatus
+        }
+        setVerificationStatus(vStatus)
         setCurrentUser({ ...userInfo, role: userRole, token })
       } catch (error) {
         console.error('Failed to setup user:', error)
@@ -139,156 +152,22 @@ const ModernCart = () => {
     }
   }, [currentUser?.uid, cart.deliveryAddress, loading]) // Only depend on user, delivery address, and loading state
 
-  // Load delivery methods when cart has items (only once)
-  useEffect(() => {
-    const loadDeliveryMethods = async () => {
-      if (cart.items?.length > 0) {
-        setLoadingDeliveryMethods(true)
-        try {
-          const deliveryData = await getDeliveryMethods()
-          setDeliveryMethods(deliveryData.deliveryMethods)
-          setTotalWeight(deliveryData.totalWeight)
-          
-          // If cart already has a delivery method selected, use it
-          if (cart.deliveryMethod) {
-            setSelectedDeliveryMethod(cart.deliveryMethod)
-            setDeliveryFee(cart.deliveryFee || 0)
-            if (cart.deliveryMethod === 'negotiated') {
-              setNegotiatedFee(cart.deliveryFee || 0)
-            }
-          } else {
-            // Set recommended method as default
-            if (deliveryData.recommendedMethod) {
-              setSelectedDeliveryMethod(deliveryData.recommendedMethod)
-              
-              // Calculate fee for recommended method
-              const feeData = await calculateDeliveryFee(deliveryData.recommendedMethod)
-              setDeliveryFee(feeData.deliveryFee)
-              
-              // Update cart with selected delivery details
-              await updateDeliveryDetails(deliveryData.recommendedMethod, feeData.deliveryFee, '', 0)
-            }
-          }
-        } catch (error) {
-          console.error('Failed to load delivery methods:', error)
-          // Set default delivery methods if API fails
-          setDeliveryMethods([
-            {
-              id: 'pickup',
-              name: 'Pickup by Yourself',
-              description: 'Collect from our warehouse/farm',
-              fee: 0,
-              estimatedDays: '0',
-              icon: '🏪'
-            }
-          ])
-          setSelectedDeliveryMethod('pickup')
-          setDeliveryFee(0)
-        } finally {
-          setLoadingDeliveryMethods(false)
+  // undo removal handling
+  const handleRemove = useCallback((item) => {
+    removedItemRef.current = item
+    removeFromCart(item._id || item.id)
+    toast.push({
+      title: t('cart.itemRemoved'),
+      action: {
+        label: t('cart.undo'),
+        onClick: () => {
+    if (!removedItemRef.current) return
+    reAddItem(removedItemRef.current)
+    toast.push({ title: t('cart.itemRestored') })
         }
       }
-    }
-
-    // Only load delivery methods if we don't already have them
-    if (cart.items?.length > 0 && deliveryMethods.length === 0 && !loadingDeliveryMethods) {
-      loadDeliveryMethods()
-    }
-  }, [cart.items?.length > 0, deliveryMethods.length === 0, loadingDeliveryMethods]) // Added loadingDeliveryMethods to prevent multiple loads
-
-  // Save pending updates to database - stable reference to prevent infinite loops
-  const savePendingUpdates = useCallback(async () => {
-    if (pendingUpdates.needsUpdate) {
-      try {
-        const updates = { ...pendingUpdates } // Capture current state
-        
-        // Clear pending updates first to prevent loops
-        setPendingUpdates({
-          deliveryMethod: null,
-          deliveryFee: null,
-          negotiatedFee: null,
-          needsUpdate: false
-        })
-        
-        await updateDeliveryDetails(
-          updates.deliveryMethod || selectedDeliveryMethod,
-          updates.deliveryFee !== null ? updates.deliveryFee : deliveryFee,
-          '',
-          updates.negotiatedFee !== null ? updates.negotiatedFee : negotiatedFee
-        )
-        
-        console.log('Cart updates saved to database')
-      } catch (error) {
-        console.error('Failed to save cart updates:', error)
-        // Restore pending updates on error
-        setPendingUpdates(prev => ({ ...prev, needsUpdate: true }))
-      }
-    }
-  }, [pendingUpdates.needsUpdate, pendingUpdates.deliveryMethod, pendingUpdates.deliveryFee, pendingUpdates.negotiatedFee, selectedDeliveryMethod, deliveryFee, negotiatedFee, updateDeliveryDetails])
-
-  // Recalculate delivery fee when quantity changes (but don't save immediately)
-  useEffect(() => {
-    const recalculateDeliveryFee = async () => {
-      if (cart.items?.length > 0 && selectedDeliveryMethod && selectedDeliveryMethod !== 'negotiated') {
-        // Clear existing timeout
-        if (deliveryFeeTimeoutRef.current) {
-          clearTimeout(deliveryFeeTimeoutRef.current)
-        }
-        
-        // Debounce the delivery fee calculation to avoid too many calls
-        deliveryFeeTimeoutRef.current = setTimeout(async () => {
-          try {
-            // Find the selected method in our local data first
-            const selectedMethod = deliveryMethods.find(method => method.id === selectedDeliveryMethod)
-            if (selectedMethod && selectedMethod.fee !== undefined) {
-              // Use local fee data if available
-              if (selectedMethod.fee !== deliveryFee) {
-                setDeliveryFee(selectedMethod.fee)
-                
-                // Mark for lazy update (save only on navigation/reload)
-                setPendingUpdates(prev => ({
-                  ...prev,
-                  deliveryFee: selectedMethod.fee,
-                  needsUpdate: true
-                }))
-              }
-            } else {
-              // Only call API if we don't have local data
-              const feeData = await calculateDeliveryFee(selectedDeliveryMethod)
-              if (feeData.deliveryFee !== deliveryFee) {
-                setDeliveryFee(feeData.deliveryFee)
-                
-                // Mark for lazy update (save only on navigation/reload)
-                setPendingUpdates(prev => ({
-                  ...prev,
-                  deliveryFee: feeData.deliveryFee,
-                  needsUpdate: true
-                }))
-              }
-            }
-          } catch (error) {
-            console.error('Failed to recalculate delivery fee:', error)
-          }
-        }, 1000) // Increased debounce to 1 second
-      }
-    }
-
-    // Only recalculate if we have items and a selected method (not for negotiated)
-    if (cart.items?.length > 0 && selectedDeliveryMethod && selectedDeliveryMethod !== 'negotiated' && deliveryMethods.length > 0) {
-      recalculateDeliveryFee()
-    }
-  }, [cart.items?.length, selectedDeliveryMethod, deliveryMethods.length]) // Simplified dependencies to prevent unnecessary re-renders
-
-  // Sync local state with cart delivery method when cart updates (but don't override pending changes)
-  useEffect(() => {
-    if (cart.deliveryMethod && cart.deliveryMethod !== selectedDeliveryMethod && !pendingUpdates.needsUpdate) {
-      setSelectedDeliveryMethod(cart.deliveryMethod)
-      setDeliveryFee(cart.deliveryFee || 0)
-      if (cart.deliveryMethod === 'negotiated') {
-        setNegotiatedFee(cart.deliveryFee || 0)
-      }
-    }
-  }, [cart.deliveryMethod, cart.deliveryFee, selectedDeliveryMethod, pendingUpdates.needsUpdate]) // Added pendingUpdates.needsUpdate to prevent overriding pending changes
+    })
+  }, [removeFromCart, reAddItem, toast, t])
 
   const handleAddAddress = async () => {
     // Refresh the address after adding a new one
@@ -336,144 +215,56 @@ const ModernCart = () => {
   }
 
   const handleQuantityChange = useCallback((itemId, newQuantity, minQty = 1) => {
-    if (newQuantity >= minQty) {
-      updateQuantity(itemId, newQuantity)
+    const item = cart.items.find(it => (it._id || it.id) === itemId)
+    if (!item) return
+    const stock = [
+      'stock','availableStock','quantityAvailable','inventory','qty','availableQuantity','availableQty','totalQty','remainingQty','remainingQuantity'
+    ].map(k => item[k] ?? item.product?.[k]).find(v => v !== undefined && v !== null)
+    if (newQuantity < minQty) {
+      toast.push({ title: t('cart.minQuantity'), message: t('cart.quantity') })
+      return
     }
-  }, [updateQuantity])
+    if (stock != null && newQuantity > stock) {
+      toast.push({ title: t('cart.maxQuantity'), message: `${stock} ${t('cart.quantity')} max` })
+      return
+    }
+    updateQuantity(itemId, newQuantity)
+  }, [cart.items, updateQuantity, t, toast])
 
-  const handleDeliveryMethodChange = useCallback((methodId) => {
-    // Prevent unnecessary calls if the method is already selected
-    if (methodId === selectedDeliveryMethod) {
-      return;
-    }
-    
-    try {
-      // Update state optimistically
-      setSelectedDeliveryMethod(methodId)
-      
-      // Get the fee from local delivery methods data instead of API call
-      const selectedMethod = deliveryMethods.find(method => method.id === methodId)
-      let newFee = 0
-      
-      if (selectedMethod) {
-        if (methodId === 'negotiated') {
-          newFee = negotiatedFee
-        } else {
-          newFee = selectedMethod.fee || 0
-        }
-      }
-      
-      setDeliveryFee(newFee)
-      
-      // Mark for lazy update (save only on navigation/reload) - NO API CALL HERE
-      setPendingUpdates(prev => ({
-        ...prev,
-        deliveryMethod: methodId,
-        deliveryFee: newFee,
-        needsUpdate: true
-      }))
-      
-    } catch (error) {
-      console.error('Failed to update delivery method:', error)
-      // Revert state on error
-      setSelectedDeliveryMethod(cart.deliveryMethod || '')
-      setDeliveryFee(cart.deliveryFee || 0)
-    }
-  }, [selectedDeliveryMethod, negotiatedFee, deliveryMethods, cart.deliveryMethod, cart.deliveryFee])
+  // (delivery method change handled in hook)
 
-  const handleNegotiatedFeeChange = useCallback((fee) => {
-    // Only proceed if the fee actually changed
-    if (fee === negotiatedFee) {
-      return;
-    }
-    
-    // Update local state immediately for responsive UI
-    setNegotiatedFee(fee)
-    
-    // Clear existing timeout
-    if (negotiatedFeeTimeoutRef.current) {
-      clearTimeout(negotiatedFeeTimeoutRef.current)
-    }
-    
-    // Only update local state and mark for lazy save - NO API CALL
-    if (selectedDeliveryMethod === 'negotiated') {
-      // Update delivery fee immediately to the negotiated fee value
-      setDeliveryFee(fee)
-      
-      // Mark for lazy update (save only on navigation/reload)
-      setPendingUpdates(prev => ({
-        ...prev,
-        negotiatedFee: fee,
-        deliveryFee: fee,
-        needsUpdate: true
-      }))
-    }
-  }, [selectedDeliveryMethod, negotiatedFee])
+  const handleSaveNegotiatedFee = () => savePendingUpdates()
+  const handleNegotiatedFeeKeyPress = useCallback((e) => { if (e.key === 'Enter') savePendingUpdates() }, [savePendingUpdates])
 
-  const handleSaveNegotiatedFee = useCallback(async () => {
-    if (selectedDeliveryMethod === 'negotiated' && pendingUpdates.needsUpdate) {
-      try {
-        await savePendingUpdates()
-        console.log('Negotiated fee saved successfully')
-      } catch (error) {
-        console.error('Failed to save negotiated fee:', error)
-      }
-    }
-  }, [selectedDeliveryMethod, pendingUpdates.needsUpdate, savePendingUpdates])
-
-  const handleNegotiatedFeeKeyPress = useCallback((e) => {
-    if (e.key === 'Enter') {
-      handleSaveNegotiatedFee()
-    }
-  }, [handleSaveNegotiatedFee])
+  // Guard checkout against quantities exceeding stock
+  const hasOverstock = cart.items.some(it => {
+    const stock = ['stock','availableStock','quantityAvailable','inventory','qty','availableQuantity']
+      .map(k => it[k])
+      .find(v => v !== undefined && v !== null)
+    return stock != null && it.quantity > stock
+  })
 
   // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (negotiatedFeeTimeoutRef.current) {
-        clearTimeout(negotiatedFeeTimeoutRef.current)
-      }
-      if (deliveryFeeTimeoutRef.current) {
-        clearTimeout(deliveryFeeTimeoutRef.current)
-      }
-    }
-  }, [])
+  // (timeouts handled inside hook now)
 
   // Save on page unload (refresh/close)
   useEffect(() => {
-    const handleBeforeUnload = (e) => {
-      if (pendingUpdates.needsUpdate) {
-        // This will trigger the browser's "are you sure you want to leave" dialog
-        e.preventDefault()
-        e.returnValue = ''
-        
-        // Try to save (though this might not complete due to page unload)
-        savePendingUpdates()
-      }
-    }
-
+    const handleBeforeUnload = (e) => { if (pendingUpdates.needsUpdate) { e.preventDefault(); e.returnValue = ''; savePendingUpdates() } }
     window.addEventListener('beforeunload', handleBeforeUnload)
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
-  }, [pendingUpdates.needsUpdate]) // Removed savePendingUpdates dependency
+  }, [pendingUpdates.needsUpdate, savePendingUpdates])
 
   // Save on component unmount or navigation
-  useEffect(() => {
-    return () => {
-      if (pendingUpdates.needsUpdate) {
-        // Synchronous save attempt on unmount
-        savePendingUpdates()
-      }
-    }
-  }, [pendingUpdates.needsUpdate]) // Removed savePendingUpdates dependency
+  useEffect(() => () => { if (pendingUpdates.needsUpdate) savePendingUpdates() }, [pendingUpdates.needsUpdate, savePendingUpdates])
 
   // Show loading state
-  if (loading) {
+  // Only block UI with loader on initial/empty load to prevent flicker during small updates
+  if (loading && cart.items.length === 0) {
     return (
-      <div className="modern-cart-container">
-        <div className="empty-cart-state">
-          <div className="empty-cart-content">
-            <p>Loading cart...</p>
-          </div>
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3 text-gray-600">
+          <div className="h-10 w-10 rounded-full border-4 border-emerald-500/20 border-t-emerald-600 animate-spin" />
+          <p className="text-sm font-medium">Loading cart...</p>
         </div>
       </div>
     )
@@ -482,12 +273,14 @@ const ModernCart = () => {
   // Show error state
   if (error) {
     return (
-      <div className="modern-cart-container">
-        <div className="empty-cart-state">
-          <div className="empty-cart-content">
-            <p className="text-red-500">Error: {error}</p>
-            <button onClick={() => window.location.reload()}>Refresh</button>
+      <div className="max-w-md mx-auto py-16 px-6">
+        <div className="rounded-2xl border border-red-200 bg-red-50/70 p-8 text-center space-y-4">
+          <div className="mx-auto h-12 w-12 rounded-full bg-red-100 flex items-center justify-center">
+            <X className="text-red-600" />
           </div>
+          <h2 className="text-lg font-semibold text-red-700">Cart Error</h2>
+          <p className="text-sm text-red-600">{error}</p>
+          <button onClick={() => window.location.reload()} className="inline-flex items-center gap-2 rounded-md bg-red-600 hover:bg-red-700 text-white text-sm font-medium px-4 py-2">Reload</button>
         </div>
       </div>
     )
@@ -495,321 +288,77 @@ const ModernCart = () => {
 
   if (cart.items.length === 0) {
     return (
-      <div className="modern-cart-container">
-        <div className="empty-cart-state">
-          <div className="empty-cart-content">
-            <div className="empty-cart-icon">
-              <ShoppingBag className="empty-icon" />
-            </div>
-            <h2 className="empty-cart-title">{t("cart.empty")}</h2>
-            <p className="empty-cart-description">{t("cart.addItems")}</p>
-            <Link to="/products" className="continue-shopping-btn">
-              <ArrowLeft className="btn-icon" />
-              {t("cart.continueShopping")}
-            </Link>
+      <div className="min-h-[60vh] flex items-center justify-center px-6">
+        <div className="w-full max-w-md text-center rounded-2xl bg-white/80 backdrop-blur shadow-sm border border-gray-200 p-10">
+          <div className="mx-auto mb-6 h-16 w-16 rounded-full bg-emerald-100 flex items-center justify-center">
+            <ShoppingBag className="text-emerald-600" size={34} />
           </div>
+          <h2 className="text-xl font-semibold tracking-tight text-gray-800 mb-2">{t("cart.empty")}</h2>
+          <p className="text-sm text-gray-500 mb-6">{t("cart.addItems")}</p>
+          <Link to="/" className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-5 py-2.5 shadow-sm">
+            <ArrowLeft size={14} /> {t("cart.continueShopping")}
+          </Link>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="modern-cart-container">
-      <div className="cart-wrapper">
-        {/* Cart Header */}
-        <div className="cart-header">
-          <div className="header-content">
-            <div className="header-title-section">
-              <ShoppingCart className="cart-icon" />
-              <div>
-                <h1 className="cart-title">{t("cart.title")}</h1>
-                <p className="cart-subtitle">
-                  {itemCount} {itemCount === 1 ? "item" : "items"} in your cart
-                </p>
-              </div>
-            </div>
-            <button onClick={clearCart} className="clear-cart-btn">
-              <Trash2 className="clear-icon" />
-              {t("cart.clearCart")}
-            </button>
-          </div>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+  <CartHeader t={t} itemCount={itemCount} pendingUpdates={pendingUpdates} savePendingUpdates={savePendingUpdates} clearCart={clearCart} />
+
+      {verificationStatus && currentUser?.role === 'client' && (
+        <CartVerificationNotice status={verificationStatus} onOpenUpload={() => setShowVerificationUpload(true)} />
+      )}
+
+      <div className="grid lg:grid-cols-3 gap-8 items-start">
+        <div className="lg:col-span-2 space-y-5">
+          {cart.items.map(item => (
+            <CartItem key={item._id || item.id} item={item} removeFromCart={() => handleRemove(item)} handleQuantityChange={handleQuantityChange} t={t} />
+          ))}
         </div>
-
-        <div className="cart-content">
-          {/* Cart Items */}
-          <div className="cart-items-section">
-            <div className="cart-items">
-              {cart.items.map((item) => (
-                <div key={item._id || item.id} className="modern-cart-item">
-                  <div className="item-image-container">
-                    <img src={item.images?.[0] || "/placeholder-product.jpg"} alt={item.name || item.title} className="item-image" />
-                  </div>
-
-                  <div className="item-details">
-                    <div className="item-info">
-                      <h3 className="item-title">{item.name || item.title}</h3>
-                      <p className="item-price">৳{(item.offerPrice || item.unitPrice || item.price || 0).toFixed(2)} per unit</p>
-                      {item.category && <span className="item-category">{item.category}</span>}
-                    </div>
-
-                    <div className="item-actions">
-                      <div className="quantity-controls">
-                        <button
-                          onClick={() => handleQuantityChange(item._id || item.id, item.quantity - 1, item.minOrderQty || 1)}
-                          className="quantity-btn"
-                          disabled={item.quantity <= (item.minOrderQty || 1)}
-                          aria-label="Decrease quantity"
-                        >
-                          <Minus className="quantity-icon" />
-                        </button>
-                        <div className="quantity-display">
-                          <span className="quantity-number">{item.quantity}</span>
-                          <span className="quantity-unit">{item.unitType || "pcs"}</span>
-                        </div>
-                        <button
-                          onClick={() => handleQuantityChange(item._id || item.id, item.quantity + 1, item.minOrderQty || 1)}
-                          className="quantity-btn"
-                          aria-label="Increase quantity"
-                        >
-                          <Plus className="quantity-icon" />
-                        </button>
-                      </div>
-
-                      <div className="item-total-section">
-                        <div className="item-total">
-                          <span className="total-label">Total</span>
-                          <span className="total-price">৳{((item.offerPrice || item.unitPrice || item.price || 0) * item.quantity).toFixed(2)}</span>
-                        </div>
-                        <button
-                          onClick={() => removeFromCart(item._id || item.id)}
-                          className="remove-item-btn"
-                          aria-label="Remove item"
-                        >
-                          <X className="remove-icon" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Cart Summary */}
-          <div className="cart-summary-section">
-            <div className="cart-summary">
-              <div className="summary-header">
-                <Package className="summary-icon" />
-                <h3>Order Summary</h3>
-              </div>
-
-              <div className="summary-details">
-                <div className="summary-row">
-                  <span className="summary-label">{t("cart.subtotal")}</span>
-                  <span className="summary-value">৳{cartTotal.toFixed(2)}</span>
-                </div>
-
-                <div className="summary-row">
-                  <span className="summary-label">
-                    <Truck className="shipping-icon" />
-                    Delivery Fee
-                  </span>
-                  <span className="summary-value">
-                    {deliveryFee === 0 ? (
-                      <span className="free-shipping">Free</span>
-                    ) : (
-                      `৳${deliveryFee.toFixed(2)}`
-                    )}
-                  </span>
-                </div>
-
-                <div className="summary-divider"></div>
-
-                <div className="summary-row total-row">
-                  <span className="summary-label total-label">{t("cart.total")}</span>
-                  <span className="summary-value total-value">৳{(cartTotal + deliveryFee).toFixed(2)}</span>
-                </div>
-              </div>
-
-              {/* Delivery Address Section */}
-              <div className="delivery-address-section">
-                <h4 className="address-section-title">
-                  <MapPin size={18} />
-                  Delivery Address
-                </h4>
-                
-                {loadingAddress ? (
-                  <div className="address-loading">Loading address...</div>
-                ) : cart.deliveryAddress ? (
-                  <div className="selected-address">
-                    <div className="address-content">
-                      <div className="address-header">
-                        <span className="address-label">{cart.deliveryAddress.label}</span>
-                        <span className="address-name">{cart.deliveryAddress.name}</span>
-                      </div>
-                      <div className="address-details">
-                        <p>{cart.deliveryAddress.addressLine1}</p>
-                        {cart.deliveryAddress.addressLine2 && <p>{cart.deliveryAddress.addressLine2}</p>}
-                        <p>{cart.deliveryAddress.city}, {cart.deliveryAddress.district}</p>
-                        <p>{cart.deliveryAddress.state} {cart.deliveryAddress.zip}</p>
-                      </div>
-                      <div className="address-phone">
-                        <User size={14} />
-                        {cart.deliveryAddress.phone}
-                      </div>
-                    </div>
-                    <button 
-                      className="change-address-btn"
-                      onClick={() => setIsAddressModalOpen(true)}
-                    >
-                      Change
-                    </button>
-                  </div>
-                ) : (
-                  <div className="no-address">
-                    <p>No delivery address found</p>
-                    <button 
-                      className="add-address-btn"
-                      onClick={() => setIsAddressModalOpen(true)}
-                    >
-                      <MapPin size={18} />
-                      Add Address
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Delivery Options Section */}
-              {cart.items?.length > 0 && (
-                <div className="delivery-options-section">
-                  <h4 className="delivery-section-title">
-                    <Truck size={18} />
-                    Delivery Options
-                    {totalWeight > 0 && (
-                      <span className="weight-info">({totalWeight}kg)</span>
-                    )}
-                  </h4>
-                  
-                  {loadingDeliveryMethods ? (
-                    <div className="delivery-loading">
-                      <div className="delivery-spinner"></div>
-                      <span>Loading delivery options...</span>
-                    </div>
-                  ) : (
-                    <div className="delivery-methods-cart">
-                      {deliveryMethods.map((method) => (
-                        <div 
-                          key={method.id}
-                          className={`delivery-method-cart ${selectedDeliveryMethod === method.id ? 'selected' : ''}`}
-                          onClick={() => handleDeliveryMethodChange(method.id)}
-                        >
-                          <div className="method-info-cart">
-                            <div className="method-header-cart">
-                              <span className="method-icon-cart">{method.icon}</span>
-                              <div className="method-content-cart">
-                                <span className="method-name-cart">{method.name}</span>
-                                <span className="method-description-cart">{method.description}</span>
-                              </div>
-                              <span className="method-fee-cart">
-                                {method.isNegotiated ? 'Negotiated' : `৳${method.fee}`}
-                              </span>
-                            </div>
-                            {method.weightInfo && (
-                              <div className="weight-breakdown-cart">{method.weightInfo}</div>
-                            )}
-                          </div>
-                          <div className="method-selector-cart">
-                            <div className={`radio-button-cart ${selectedDeliveryMethod === method.id ? 'checked' : ''}`}></div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Negotiated Fee Input */}
-                  {selectedDeliveryMethod === 'negotiated' && (
-                    <div className="negotiated-fee-cart">
-                      <label htmlFor="negotiatedFeeCart">Negotiated Delivery Fee</label>
-                      <div className="input-group-cart">
-                        <span className="input-prefix-cart">৳</span>
-                        <input
-                          type="number"
-                          id="negotiatedFeeCart"
-                          value={negotiatedFee || ''}
-                          onChange={(e) => handleNegotiatedFeeChange(Number(e.target.value) || 0)}
-                          onKeyPress={handleNegotiatedFeeKeyPress}
-                          onFocus={(e) => e.target.select()}
-                          placeholder="Enter negotiated fee"
-                          min="0"
-                          step="0.01"
-                        />
-                        <button 
-                          className="save-fee-btn"
-                          onClick={handleSaveNegotiatedFee}
-                          disabled={!pendingUpdates.needsUpdate}
-                          title="Save negotiated fee to database"
-                        >
-                          Save
-                        </button>
-                      </div>
-                      <small>Fee agreed upon with the seller. Press Enter or click Save to update.</small>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div className="summary-actions">
-                <button 
-                  className="checkout-btn"
-                  disabled={!cart.deliveryAddress || !selectedDeliveryMethod}
-                  title={
-                    !cart.deliveryAddress 
-                      ? "Please add a delivery address to proceed" 
-                      : !selectedDeliveryMethod 
-                      ? "Please select a delivery method to proceed"
-                      : ""
-                  }
-                  onClick={async () => {
-                    // Save pending updates before checkout and wait for completion
-                    if (pendingUpdates.needsUpdate) {
-                      await savePendingUpdates()
-                    }
-                    navigate('/checkout')
-                  }}
-                >
-                  <CreditCard className="checkout-icon" />
-                  {t("cart.proceedToCheckout")}
-                </button>
-
-                <Link to="/" className="continue-shopping-link">
-                  <ArrowLeft className="continue-icon" />
-                  {t("cart.continueShopping")}
-                </Link>
-              </div>
-
-              <div className="security-badge">
-                <div className="security-content">
-                  <div className="security-icon">🔒</div>
-                  <div className="security-text">
-                    <span className="security-title">Secure Checkout</span>
-                    <span className="security-subtitle">Your information is protected</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        {isAddressModalOpen && (
-          <AddAddressModal
-            token={currentUser?.token || vendorAuth.token || clientAuth.token || localStorage.getItem('clientToken') || sessionStorage.getItem('vendorToken')}
-            uid={currentUser?.uid}
-            role={currentUser?.role}
-            onClose={() => setIsAddressModalOpen(false)}
-            onSaved={handleAddAddress}
+        <div className="space-y-6">
+          <CartSummary
+            t={t}
+            cart={cart}
+            cartTotal={cartTotal}
+            deliveryFee={deliveryFee}
+            loadingAddress={loadingAddress}
+            setIsAddressModalOpen={setIsAddressModalOpen}
+            deliveryMethods={deliveryMethods}
+            selectedDeliveryMethod={selectedDeliveryMethod}
+            handleDeliveryMethodChange={handleDeliveryMethodChange}
+            loadingDeliveryMethods={loadingDeliveryMethods}
+            totalWeight={totalWeight}
+            negotiatedFee={negotiatedFee}
+            handleNegotiatedFeeChange={handleNegotiatedFeeChange}
+            handleNegotiatedFeeKeyPress={handleNegotiatedFeeKeyPress}
+            handleSaveNegotiatedFee={handleSaveNegotiatedFee}
+            pendingUpdates={pendingUpdates}
+            verificationStatus={verificationStatus}
+            navigate={navigate}
+            savePendingUpdates={savePendingUpdates}
+            setShowVerificationUpload={setShowVerificationUpload}
+            feeLoading={feeLoading}
+            hasOverstock={hasOverstock}
           />
-        )}
+        </div>
       </div>
+
+      {isAddressModalOpen && (
+        <AddAddressModal
+          token={currentUser?.token || vendorAuth.token || clientAuth.token || localStorage.getItem('clientToken') || sessionStorage.getItem('vendorToken')}
+          uid={currentUser?.uid}
+          role={currentUser?.role}
+          onClose={() => setIsAddressModalOpen(false)}
+          onSaved={handleAddAddress}
+        />
+      )}
+      {showVerificationUpload && (
+        <Suspense fallback={<div className="fixed inset-0 bg-black/10 flex items-center justify-center"><div className="h-10 w-10 rounded-full border-4 border-emerald-500/30 border-t-emerald-600 animate-spin" /></div>}>
+          <VerificationUpload onClose={() => setShowVerificationUpload(false)} onSubmitted={(s)=> { setVerificationStatus(s); }} />
+        </Suspense>
+      )}
     </div>
   )
 }
