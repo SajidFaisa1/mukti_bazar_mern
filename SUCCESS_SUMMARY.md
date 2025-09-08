@@ -59,7 +59,7 @@ function App() {
 - **Classes**: 52 plant disease categories
 - **Input**: 224x224 RGB images
 - **Accuracy**: Based on your training results
-- **Supports**: Apple, Tomato, Corn, Grape, Potato, and more
+- **Supports**: Apple, Tomato, Corn, Grape, Potato, Wheat, and more
 
 ## 🔧 Next Steps:
 1. Start your backend server (npm run dev in backend/)

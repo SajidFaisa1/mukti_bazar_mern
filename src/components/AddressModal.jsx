@@ -216,13 +216,14 @@ const AddressModal = ({ isOpen, onClose, onAddAddress, currentUser }) => {
             </div>
 
             <div className="form-group">
-              <label htmlFor="zip">ZIP Code</label>
+              <label htmlFor="zip">ZIP Code *</label>
               <input
                 type="text"
                 id="zip"
                 name="zip"
                 value={formData.zip}
                 onChange={handleInputChange}
+                required
                 placeholder="Enter ZIP code"
               />
             </div>

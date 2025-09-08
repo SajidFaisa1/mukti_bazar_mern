@@ -103,6 +103,15 @@ router.post('/checkout', protect, checkoutLimiter, validateBody({
       });
     }
 
+    // Validate delivery address has required fields
+    const deliveryAddr = cart.deliveryAddress;
+    if (!deliveryAddr.zip || deliveryAddr.zip.trim() === '') {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'ZIP code is required for delivery address. Please update your address to include a postal code.' 
+      });
+    }
+
     if (!cart.deliveryMethod) {
       return res.status(400).json({ 
         success: false, 

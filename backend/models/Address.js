@@ -13,7 +13,7 @@ const addressSchema = new mongoose.Schema(
     city: { type: String, required: true },
     state: { type: String }, // Division name
     district: { type: String }, // District name
-    zip: { type: String },
+    zip: { type: String, required: true },
     country: { type: String, default: 'Bangladesh' },
 
     role: { type: String, enum: ['client', 'vendor', 'admin'], default: 'client' },

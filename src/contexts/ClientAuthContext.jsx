@@ -141,7 +141,43 @@ export const ClientAuthProvider = ({ children }) => {
     setUser(null);
   };
 
-  const value = { user, token, loading, error, success, signup, login, loginWithGoogle, logout };
+  const updateProfile = async (profileData) => {
+    setError('');
+    setSuccess('');
+    setLoading(true);
+    try {
+      const res = await fetch('http://localhost:5005/api/users/profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(profileData)
+      });
+
+      if (!res.ok) {
+        const { error = 'Profile update failed' } = await res.json().catch(() => ({}));
+        throw new Error(error);
+      }
+
+      const { user: updatedUser, message } = await res.json();
+      
+      // Update local storage and state
+      localStorage.setItem('clientUser', JSON.stringify(updatedUser));
+      setUser(updatedUser);
+      setSuccess(message || 'Profile updated successfully');
+      
+      return updatedUser;
+    } catch (err) {
+      console.error('Profile update error:', err);
+      setError(err.message || 'Failed to update profile');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const value = { user, token, loading, error, success, signup, login, loginWithGoogle, logout, updateProfile };
   return <ClientAuthContext.Provider value={value}>{children}</ClientAuthContext.Provider>;
 };
 

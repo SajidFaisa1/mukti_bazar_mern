@@ -110,6 +110,12 @@ const Checkout = () => {
       return;
     }
 
+    // Check if delivery address has ZIP code
+    if (!cart.deliveryAddress.zip || cart.deliveryAddress.zip.trim() === '') {
+      setCheckoutError('ZIP code is required for delivery. Please update your delivery address to include a postal code.');
+      return;
+    }
+
     if (!cart.deliveryMethod) {
       setCheckoutError('Please select a delivery method');
       return;

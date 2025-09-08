@@ -1,4 +1,6 @@
 const BASE_URL = 'http://localhost:5005/agriculture'; // Replace with actual API URL
+// New backend API base (migrating from mock):
+const API_BASE = 'http://localhost:5005/api/agriculture';
 
 // Mock API implementation
 const mockApi = {
@@ -222,9 +224,9 @@ const mockApi = {
     const locationInfo = mockApi.locations[location];
     
     const compatibilityScore = (
-      productInfo.climate.includes(locationInfo.climate) ? 1 : 0 +
-      productInfo.soil.includes(locationInfo.soil) ? 1 : 0 +
-      productInfo.rainfall.includes(locationInfo.rainfall) ? 1 : 0
+      (productInfo.climate.includes(locationInfo.climate) ? 1 : 0) +
+      (productInfo.soil.includes(locationInfo.soil) ? 1 : 0) +
+      (productInfo.rainfall.includes(locationInfo.rainfall) ? 1 : 0)
     ) / 3;
     
     const seasonalityScore = productInfo.season.includes(month.toLowerCase()) ? 1 : 0.5;
@@ -304,4 +306,19 @@ export const getAIRecommendations = async (month = 'All', location = 'Dhaka') =>
   
   return recommendations;
 };
+
+// ==== New intelligent endpoints (forecast + region recommendations) ====
+export async function fetchForecast(product, region, months=12, horizon=3) {
+  const url = `${API_BASE}/forecast?product=${encodeURIComponent(product)}&region=${encodeURIComponent(region)}&months=${months}&horizon=${horizon}`;
+  const r = await fetch(url);
+  if (!r.ok) throw new Error('Forecast fetch failed');
+  return r.json();
+}
+
+export async function fetchRegionRecommendations(region, season='') {
+  const url = `${API_BASE}/recommendations?region=${encodeURIComponent(region)}&season=${encodeURIComponent(season)}`;
+  const r = await fetch(url);
+  if (!r.ok) throw new Error('Recommendations fetch failed');
+  return r.json();
+}
 

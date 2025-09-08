@@ -91,14 +91,14 @@ class AIFarmingChatbot {
   }
 
   /**
-   * Generate context-aware response using Ollama
+   * Generate context-aware response using Ollama with optional detection context
    */
-  async generateResponse(userMessage, userRole = 'client') {
-    const systemPrompt = this.buildSystemPrompt(userRole);
+  async generateResponse(userMessage, userRole = 'client', detectionContext = null) {
+    const systemPrompt = this.buildSystemPrompt(userRole, detectionContext);
     const modelReady = await this.ensureModel();
     if (!modelReady) {
       console.warn('Ollama model not ready; using fallback.');
-      return this.getRuleBasedResponse(userMessage, userRole);
+      return this.getRuleBasedResponse(userMessage, userRole, detectionContext);
     }
     try {
       const response = await fetch(`${this.ollamaUrl}/api/generate`, {
@@ -121,15 +121,15 @@ class AIFarmingChatbot {
       return { success: true, response: data.response, model: this.model, tokens: data.eval_count || 0 };
     } catch (error) {
       console.error('Ollama API error:', error.message || error);
-      return this.getRuleBasedResponse(userMessage, userRole);
+      return this.getRuleBasedResponse(userMessage, userRole, detectionContext);
     }
   }
 
   /**
    * Build system prompt based on user role and project context
    */
-  buildSystemPrompt(userRole) {
-    return `You are an intelligent customer service assistant for Mukti Bazar, a revolutionary agricultural e-commerce platform in Bangladesh.
+  buildSystemPrompt(userRole, detectionContext = null) {
+    let basePrompt = `You are an intelligent customer service assistant for Mukti Bazar, a revolutionary agricultural e-commerce platform in Bangladesh.
 
 MISSION: Help break agricultural syndicates by connecting farmers directly with shop owners, eliminating middlemen who artificially increase prices.
 
@@ -162,6 +162,32 @@ RESPONSE GUIDELINES:
 
 Current user role: ${userRole}
 ${this.getUserRoleGuidance(userRole)}`;
+
+    // Add plant disease detection context if provided
+    if (detectionContext) {
+      const plant = detectionContext.prediction?.plant?.replace(/_/g, ' ') || 'unknown plant';
+      const disease = detectionContext.prediction?.disease?.replace(/_/g, ' ') || 'unknown condition';
+      const isHealthy = detectionContext.prediction?.is_healthy;
+      const confidence = detectionContext.prediction?.confidence;
+      const severity = detectionContext.disease_info?.severity;
+      const treatment = detectionContext.disease_info?.treatment;
+      const prevention = detectionContext.disease_info?.prevention;
+      
+      basePrompt += `
+
+CURRENT PLANT DIAGNOSIS CONTEXT:
+- Plant Type: ${plant}
+- Condition: ${disease}
+- Health Status: ${isHealthy ? 'Healthy' : 'Disease Detected'}
+- Detection Confidence: ${confidence ? (confidence * 100).toFixed(1) + '%' : 'N/A'}
+${severity ? `- Disease Severity: ${severity}` : ''}
+${treatment ? `- Recommended Treatment: ${treatment}` : ''}
+${prevention ? `- Prevention Measures: ${prevention}` : ''}
+
+IMPORTANT: Use this specific diagnosis information to provide targeted advice. Don't give generic responses - focus on the actual detected condition and provide specific guidance based on the diagnosis results.`;
+    }
+
+    return basePrompt;
   }
 
   /**
@@ -197,8 +223,67 @@ USER ROLE CONTEXT: You're helping an administrator who monitors the platform.
   /**
    * Fallback rule-based responses when Ollama is not available
    */
-  getRuleBasedResponse(message, userRole) {
+  getRuleBasedResponse(message, userRole, detectionContext = null) {
     const lowerMessage = message.toLowerCase();
+    
+    // Handle plant disease detection context first
+    if (detectionContext) {
+      const plant = detectionContext.prediction?.plant?.replace(/_/g, ' ') || 'plant';
+      const disease = detectionContext.prediction?.disease?.replace(/_/g, ' ') || 'condition';
+      const isHealthy = detectionContext.prediction?.is_healthy;
+      const treatment = detectionContext.disease_info?.treatment;
+      const prevention = detectionContext.disease_info?.prevention;
+      const severity = detectionContext.disease_info?.severity;
+      
+      // Treatment-related questions
+      if (lowerMessage.includes('treat') || lowerMessage.includes('cure') || lowerMessage.includes('medicine')) {
+        if (isHealthy) {
+          return {
+            success: true,
+            response: `Great news! Your ${plant} is healthy. To maintain its health: 1) Continue regular watering and proper fertilization, 2) Monitor for early signs of disease, 3) Ensure good air circulation, 4) Remove any fallen leaves promptly. Keep up the good care! আপনার গাছ সুস্থ আছে! (Your plant is healthy!)`
+          };
+        } else {
+          let response = `For ${disease} in your ${plant}: `;
+          if (treatment) {
+            response += treatment;
+          } else {
+            response += "Apply appropriate fungicide treatment, remove affected leaves, and improve air circulation around the plant.";
+          }
+          if (severity) {
+            response += ` This is a ${severity.toLowerCase()} severity condition.`;
+          }
+          response += " Monitor the plant closely and repeat treatment if necessary.";
+          return { success: true, response };
+        }
+      }
+      
+      // Prevention questions
+      if (lowerMessage.includes('prevent') || lowerMessage.includes('avoid') || lowerMessage.includes('future')) {
+        let response = `To prevent ${disease} in your ${plant}: `;
+        if (prevention) {
+          response += prevention;
+        } else {
+          response += "Maintain proper plant spacing, avoid overhead watering, ensure good drainage, and practice crop rotation.";
+        }
+        response += " Regular monitoring and early intervention are key to preventing disease spread.";
+        return { success: true, response };
+      }
+      
+      // Cause questions
+      if (lowerMessage.includes('cause') || lowerMessage.includes('why') || lowerMessage.includes('reason')) {
+        if (isHealthy) {
+          return {
+            success: true,
+            response: `Your ${plant} is healthy! Good growing conditions, proper care, and favorable weather contribute to plant health. Continue your current care routine.`
+          };
+        } else {
+          return {
+            success: true,
+            response: `${disease} in ${plant} is typically caused by fungal infection, often due to high humidity, poor air circulation, or wet conditions. Environmental stress, overcrowding, and poor drainage can make plants more susceptible.`
+          };
+        }
+      }
+    }
     
     // Common questions with Bengali phrases
     const responses = {

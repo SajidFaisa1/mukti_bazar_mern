@@ -40,7 +40,21 @@ const notificationRoutes = require('./routes/notification');
 const plantDiseaseRoutes = require('./routes/plantDisease');
 const userModerationRoutes = require('./routes/userModeration');
 const homeSummaryRoutes = require('./routes/homeSummary');
+const agricultureRoutes = require('./routes/agriculture');
 const feedbackRoutes = require('./routes/feedback');
+const monitoringRoutes = require('./routes/monitoring');
+const analyticsRoutes = require('./routes/analytics');
+const responsesRoutes = require('./routes/responses');
+const inventoryRoutes = require('./routes/inventory');
+const adminManagementRoutes = require('./routes/adminManagement');
+const communicationRoutes = require('./routes/communication');
+const { adminRouter: adminCommunicationRoutes, publicRouter: publicCommunicationRoutes } = communicationRoutes;
+const financialRoutes = require('./routes/financial');
+const advancedUserManagementRoutes = require('./routes/advancedUserManagement');
+const contentProductManagementRoutes = require('./routes/contentProductManagement');
+const systemConfigurationRoutes = require('./routes/systemConfiguration');
+const realTimeMonitoringRoutes = require('./routes/realTimeMonitoring');
+const realTimeAnalyticsRoutes = require('./routes/realTimeAnalytics');
 
 const app = express();
 // Middleware: request id & logging early
@@ -141,6 +155,20 @@ app.use('/api/chat', aiChatRoutes);
 app.use('/api/user-moderation', userModerationRoutes);
 app.use('/api/home', homeSummaryRoutes);
 app.use('/api/feedback', feedbackRoutes);
+app.use('/api/agriculture', agricultureRoutes);
+app.use('/api/admin/monitoring', monitoringRoutes);
+app.use('/api/admin/analytics', analyticsRoutes);
+app.use('/api/admin/responses', responsesRoutes);
+app.use('/api/admin/inventory', inventoryRoutes);
+app.use('/api/admin/management', adminManagementRoutes);
+app.use('/api/admin/communication', adminCommunicationRoutes);
+app.use('/api/communication', publicCommunicationRoutes); // Public routes
+app.use('/api/admin/financial', financialRoutes);
+app.use('/api/admin', advancedUserManagementRoutes);
+app.use('/api/admin', contentProductManagementRoutes);
+app.use('/api/admin', systemConfigurationRoutes);
+app.use('/api/admin', realTimeMonitoringRoutes);
+app.use('/api/admin', realTimeAnalyticsRoutes);
 
 // Quick 410 for very old endpoints we deliberately removed
 ['/api/vendor/signup', '/api/client/signup'].forEach(path => {

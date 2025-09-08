@@ -16,6 +16,8 @@ import ActivityTicker from './home/ActivityTicker';
 import TestimonialsCarousel from './home/TestimonialsCarousel';
 import RatingsDistribution from './home/RatingsDistribution';
 import ComplianceBadges from './home/ComplianceBadges';
+import AnnouncementBanner from './common/AnnouncementBanner';
+import AnnouncementWidget from './common/AnnouncementWidget';
 
 
 const Home = () => {
@@ -111,6 +113,9 @@ const Home = () => {
 
       {/* Hero / Carousel (full bleed) */}
       <div className="relative shadow-sm shadow-primary-900/5"> <Carousel /> </div>
+
+      {/* Announcement Banner */}
+      <AnnouncementBanner />
 
       {/* Feature Pillars */}
       <div className="mt-12 md:mt-16">
@@ -265,6 +270,7 @@ const Home = () => {
           </div>
           <div className="flex flex-col gap-8">
             <ActivityTicker items={activity} />
+            <AnnouncementWidget limit={4} showViewAll={true} />
             <div className="rounded-2xl border border-primary-100/70 bg-white/70 backdrop-blur-sm p-4 text-[11px] text-primary-600 font-medium">
               <p className="mb-2 font-semibold text-primary-700 text-xs uppercase tracking-wide">Why These Features?</p>
               <ul className="space-y-1 list-disc list-inside">

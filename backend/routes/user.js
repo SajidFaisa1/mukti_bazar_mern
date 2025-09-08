@@ -59,4 +59,41 @@ router.post('/signup', async (req, res) => {
   }
 });
 
+// PUT /api/users/profile – update user profile
+router.put('/profile', protect, async (req, res) => {
+  try {
+    const { name, phone } = req.body;
+    const userId = req.user.id;
+
+    // Validate input
+    if (name && name.trim().length < 2) {
+      return res.status(400).json({ error: 'Name must be at least 2 characters long' });
+    }
+
+    if (phone && !/^\+?[\d\s\-\(\)]{10,15}$/.test(phone)) {
+      return res.status(400).json({ error: 'Invalid phone number format' });
+    }
+
+    // Update user profile
+    const updateData = {};
+    if (name !== undefined) updateData.name = name.trim();
+    if (phone !== undefined) updateData.phone = phone.trim();
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      updateData,
+      { new: true, runValidators: true }
+    ).select('-password');
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({ user, message: 'Profile updated successfully' });
+  } catch (err) {
+    console.error('Profile update error:', err);
+    res.status(500).json({ error: 'Failed to update profile' });
+  }
+});
+
 module.exports = router;

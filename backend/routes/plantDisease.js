@@ -3,23 +3,14 @@ const multer = require('multer');
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
+const DetectionHistory = require('../models/DetectionHistory');
+const auth = require('../middleware/auth');
+const cloudinary = require('../config/cloudinary');
 
 const router = express.Router();
 
-// Configure multer for image uploads
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        const uploadDir = path.join(__dirname, '../uploads/disease_detection');
-        if (!fs.existsSync(uploadDir)) {
-            fs.mkdirSync(uploadDir, { recursive: true });
-        }
-        cb(null, uploadDir);
-    },
-    filename: function (req, file, cb) {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, 'plant-' + uniqueSuffix + path.extname(file.originalname));
-    }
-});
+// Configure multer for image uploads (memory storage for Cloudinary)
+const storage = multer.memoryStorage();
 
 const upload = multer({ 
     storage: storage,
@@ -59,7 +50,8 @@ router.get('/health', async (req, res) => {
 });
 
 // Plant disease detection endpoint
-router.post('/detect', upload.single('image'), async (req, res) => {
+router.post('/detect', auth.protect, upload.single('image'), async (req, res) => {
+    const startTime = Date.now();
     try {
         if (!req.file) {
             return res.status(400).json({
@@ -68,17 +60,47 @@ router.post('/detect', upload.single('image'), async (req, res) => {
             });
         }
 
-        // Read the uploaded image
-        const imagePath = req.file.path;
-        const imageBuffer = fs.readFileSync(imagePath);
+        // Get user info and session
+        const userId = req.user?.id || null;
+        const userRole = req.headers['x-user-role'] || 'guest';
+        const sessionId = req.headers['x-session-id'] || `session-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        const plantFilter = req.body.plant_name || null;
 
-        // Create form data for the AI service
+        // Upload image to Cloudinary first
+        let cloudinaryResult;
+        try {
+            // Convert buffer to base64 for Cloudinary upload
+            const base64Image = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+            
+            cloudinaryResult = await cloudinary.uploader.upload(base64Image, {
+                folder: 'plant_disease_detection',
+                resource_type: 'image',
+                quality: 'auto',
+                fetch_format: 'auto'
+            });
+            
+            console.log('Image uploaded to Cloudinary:', cloudinaryResult.secure_url);
+        } catch (cloudinaryError) {
+            console.error('Cloudinary upload failed:', cloudinaryError);
+            return res.status(500).json({
+                success: false,
+                error: 'Failed to upload image to cloud storage',
+                details: cloudinaryError.message
+            });
+        }
+
+        // Create form data for the AI service using the original buffer
         const FormData = require('form-data');
         const form = new FormData();
-        form.append('image', imageBuffer, {
-            filename: req.file.filename,
+        form.append('image', req.file.buffer, {
+            filename: req.file.originalname,
             contentType: req.file.mimetype
         });
+        
+        // Add plant filter if provided
+        if (plantFilter) {
+            form.append('plant_name', plantFilter);
+        }
 
         // Send image to AI service
         const aiResponse = await axios.post(`${AI_SERVICE_URL}/predict`, form, {
@@ -88,39 +110,68 @@ router.post('/detect', upload.single('image'), async (req, res) => {
             timeout: 30000 // 30 second timeout
         });
 
-        // Save detection result to database if needed
-        const detectionResult = {
-            userId: req.user?.id || null,
-            imagePath: req.file.path,
-            filename: req.file.filename,
-            prediction: aiResponse.data,
-            timestamp: new Date()
+        const processingTime = Date.now() - startTime;
+
+        // Save detection result to database
+        const detectionData = {
+            userId: userId,
+            sessionId: sessionId,
+            imagePath: cloudinaryResult.secure_url, // Use Cloudinary URL
+            cloudinaryPublicId: cloudinaryResult.public_id, // Store for potential deletion
+            filename: req.file.originalname,
+            plantFilter: plantFilter,
+            prediction: {
+                plant: aiResponse.data.prediction?.plant,
+                disease: aiResponse.data.prediction?.disease,
+                confidence: aiResponse.data.prediction?.confidence,
+                is_healthy: aiResponse.data.prediction?.is_healthy,
+                full_class: aiResponse.data.prediction?.full_class,
+                plant_filter_applied: aiResponse.data.prediction?.plant_filter_applied || false
+            },
+            disease_info: aiResponse.data.disease_info || {},
+            top_predictions: aiResponse.data.top_predictions || [],
+            recommendation: aiResponse.data.recommendation || '',
+            userRole: userRole,
+            metadata: {
+                fileSize: req.file.size,
+                mimeType: req.file.mimetype,
+                processingTime: processingTime,
+                model_version: aiResponse.data.detection_metadata?.model_version,
+                confidence_threshold: aiResponse.data.detection_metadata?.confidence_threshold,
+                detection_timestamp: aiResponse.data.detection_metadata?.detection_timestamp,
+                cloudinary_url: cloudinaryResult.secure_url
+            }
         };
 
-        // Optional: Save to database
-        // const DetectionHistory = require('../models/DetectionHistory');
-        // await DetectionHistory.create(detectionResult);
+        // Save to database
+        const savedDetection = await DetectionHistory.create(detectionData);
+        console.log(`Detection saved to database with ID: ${savedDetection._id}`);
 
-        // Clean up uploaded file after processing (optional)
-        // fs.unlinkSync(imagePath);
+        // Add detection ID to response
+        const responseData = {
+            ...aiResponse.data,
+            detectionId: savedDetection._id,
+            sessionId: sessionId,
+            imageUrl: cloudinaryResult.secure_url // Include Cloudinary URL in response
+        };
 
         res.json({
             success: true,
-            result: aiResponse.data,
+            result: responseData,
             metadata: {
-                filename: req.file.filename,
+                filename: req.file.originalname,
                 size: req.file.size,
-                uploadTime: new Date().toISOString()
+                uploadTime: new Date().toISOString(),
+                processingTime: processingTime,
+                detectionId: savedDetection._id,
+                imageUrl: cloudinaryResult.secure_url
             }
         });
 
     } catch (error) {
         console.error('Disease detection error:', error);
         
-        // Clean up uploaded file in case of error
-        if (req.file && fs.existsSync(req.file.path)) {
-            fs.unlinkSync(req.file.path);
-        }
+        // No need to clean up local files since we're using Cloudinary
 
         if (error.response) {
             // AI service returned an error
@@ -147,20 +198,44 @@ router.post('/detect', upload.single('image'), async (req, res) => {
 });
 
 // Get detection history for a user
-router.get('/history', async (req, res) => {
+router.get('/history', auth.protect, async (req, res) => {
     try {
-        // This would require a DetectionHistory model
-        // const DetectionHistory = require('../models/DetectionHistory');
-        // const history = await DetectionHistory.find({ userId: req.user.id })
-        //     .sort({ timestamp: -1 })
-        //     .limit(20);
+        const userId = req.user?.id;
+        const limit = parseInt(req.query.limit) || 20;
+        const page = parseInt(req.query.page) || 1;
+        const skip = (page - 1) * limit;
+        
+        const query = userId ? { userId } : {};
+        
+        // Add filters if provided
+        if (req.query.plant) {
+            query['prediction.plant'] = new RegExp(req.query.plant, 'i');
+        }
+        if (req.query.healthy !== undefined) {
+            query['prediction.is_healthy'] = req.query.healthy === 'true';
+        }
+        
+        const history = await DetectionHistory.find(query)
+            .sort({ timestamp: -1 })
+            .limit(limit)
+            .skip(skip)
+            .populate('chatSessions', 'sessionId summary createdAt')
+            .select('-imagePath'); // Don't expose full file paths
+        
+        const total = await DetectionHistory.countDocuments(query);
         
         res.json({
             success: true,
-            history: [],
-            message: 'History feature not yet implemented'
+            history: history,
+            pagination: {
+                total,
+                page,
+                limit,
+                pages: Math.ceil(total / limit)
+            }
         });
     } catch (error) {
+        console.error('History fetch error:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to fetch history',

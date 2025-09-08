@@ -96,6 +96,7 @@ The model currently supports detection of diseases in:
 - Corn (rust, leaf blight, leaf spot)
 - Grape (black rot, leaf blight)
 - Potato (early blight, late blight)
+- Wheat (yellow rust, black rust, brown leaf rust, powdery mildew, scab, leaf blight)
 - And many more...
 
 ## Model Information

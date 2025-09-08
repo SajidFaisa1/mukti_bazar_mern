@@ -54,10 +54,29 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
+    // Check if admin account is enabled and active
+    if (!admin.enabled || admin.status !== 'active') {
+      return res.status(401).json({ error: 'Account is disabled or inactive' });
+    }
+
     const isValid = await admin.comparePassword(password);
     if (!isValid) {
+      // Increment login attempts (if metadata exists)
+      if (admin.metadata) {
+        admin.metadata.loginAttempts = (admin.metadata.loginAttempts || 0) + 1;
+        admin.metadata.lastFailedLogin = new Date();
+        await admin.save();
+      }
       return res.status(401).json({ error: 'Invalid credentials' });
     }
+
+    // Reset login attempts on successful login
+    if (admin.metadata) {
+      admin.metadata.loginAttempts = 0;
+      admin.metadata.lastFailedLogin = null;
+    }
+    admin.lastLoginAt = new Date();
+    await admin.save();
 
     const token = jwt.sign(
       { id: admin._id, role: 'admin', email: admin.email }, 
@@ -71,7 +90,10 @@ router.post('/login', async (req, res) => {
       admin: { 
         id: admin._id, 
         email: admin.email, 
-        role: 'admin' 
+        name: admin.name,
+        role: admin.role, // Return the actual admin role (super_admin, admin, etc.)
+        adminRole: admin.role,
+        permissions: admin.permissions
       } 
     });
   } catch (err) {
@@ -87,7 +109,10 @@ router.get('/me', protect, adminOnly, (req, res) => {
     admin: {
       id: req.user.id,
       email: req.user.email,
-      role: req.user.role
+      name: req.user.name,
+      role: req.user.adminRole || req.user.role,
+      adminRole: req.user.adminRole,
+      permissions: req.user.permissions
     }
   });
 });

@@ -180,8 +180,8 @@ const AddAddressModal = ({ token, uid, role, onClose, onSaved }) => {
               </div>
             )}
             <div className="space-y-2">
-              <label className="text-xs font-semibold uppercase tracking-wide text-accent-600">ZIP / Postcode</label>
-              <input name="zip" value={form.zip} onChange={handleChange} className="w-full rounded-xl border-2 border-accent-200 px-4 py-2.5 text-sm font-medium focus:border-primary-500 focus:ring-4 focus:ring-primary-200" />
+              <label className="text-xs font-semibold uppercase tracking-wide text-accent-600">ZIP / Postcode *</label>
+              <input required name="zip" value={form.zip} onChange={handleChange} className="w-full rounded-xl border-2 border-accent-200 px-4 py-2.5 text-sm font-medium focus:border-primary-500 focus:ring-4 focus:ring-primary-200" />
             </div>
             <div className="space-y-2">
               <label className="text-xs font-semibold uppercase tracking-wide text-accent-600">Country</label>

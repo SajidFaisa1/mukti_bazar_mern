@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import Chart from 'react-apexcharts';
 import { 
-  mockProductPrices, 
+  mockProductPrices, // kept as local fallback
   fetchProductList,
   fetchLocations,
-  getAIRecommendations 
+  getAIRecommendations, // legacy mock scoring
+  fetchForecast,
+  fetchRegionRecommendations
 } from '../services/agricultureApi';
 import Chat from './Chat';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -20,7 +22,11 @@ const Analysis = () => {
   const [error, setError] = useState(null);
   const [products, setProducts] = useState([]);
   const [locations, setLocations] = useState([]);
-  const [recommendations, setRecommendations] = useState([]);
+  const [recommendations, setRecommendations] = useState([]); // legacy mock
+  const [smartRecs, setSmartRecs] = useState([]); // backend intelligent
+  const [forecast, setForecast] = useState(null);
+  const [usingBackend, setUsingBackend] = useState(true);
+  const [season, setSeason] = useState('');
   const [showChat, setShowChat] = useState(false);
 
   useEffect(() => {
@@ -50,10 +56,20 @@ const Analysis = () => {
       setLoading(true);
       setError(null);
       try {
-        const data = await mockProductPrices(selectedProduct, selectedMonth, selectedLocation);
-        setProductData(data);
-        
-        // Get recommendations for all products
+        // Fetch forecast & region recommendations from backend
+        try {
+          const fc = await fetchForecast(selectedProduct, selectedLocation, 12, 3);
+          setForecast(fc);
+          const regionRecRes = await fetchRegionRecommendations(selectedLocation, season);
+          setSmartRecs(regionRecRes.recommendations || []);
+        } catch (e) {
+          console.warn('Backend agriculture endpoints unavailable, falling back to mock. Reason:', e.message);
+          setUsingBackend(false);
+        }
+        // Always build local productData for chart (historical + simple prediction fallback)
+        const fallbackData = await mockProductPrices(selectedProduct, selectedMonth, selectedLocation);
+        setProductData(fallbackData);
+        // Legacy mock recs for comparison baseline
         const recs = await getAIRecommendations(selectedMonth, selectedLocation);
         setRecommendations(recs);
       } catch (err) {
@@ -63,7 +79,7 @@ const Analysis = () => {
       }
     };
     fetchData();
-  }, [selectedProduct, selectedMonth, selectedLocation]);
+  }, [selectedProduct, selectedMonth, selectedLocation, season]);
 
   if (loading) {
     return (
@@ -113,7 +129,18 @@ const Analysis = () => {
     {
       name: selectedProduct,
       data: productData?.prices || []
-    }
+    },
+    ...(forecast?.forecast ? [{
+      name: 'Forecast',
+      data: (()=> {
+        const baseLen = productData?.prices?.length || 0;
+        const lastVal = productData?.prices?.[baseLen-1] || 0;
+        // align forecast steps after historical range (pad with nulls for apex overlay)
+        const arr = Array(baseLen-1).fill(null).concat([lastVal]);
+        forecast.forecast.forEach((f,i)=> arr.push(f.price));
+        return arr;
+      })()
+    }]: [])
   ];
 
   const insights = productData ? {
@@ -122,39 +149,21 @@ const Analysis = () => {
     range: `${Math.min(...productData.prices)} - ${Math.max(...productData.prices)} BDT/kg`,
     lastUpdated: new Date(productData.lastUpdated).toLocaleString(),
     prediction: productData.prediction,
-    recommendation: productData.recommendation
+    recommendation: productData.recommendation,
+    slope: forecast?.slope,
+    forecastNext: forecast?.forecast?.[0]
   } : null;
 
   return (
     <div className="analysis-container">
-      <div className="chat-toggle">
-        <button 
-          onClick={() => setShowChat(!showChat)}
-          className={`chat-toggle-btn ${showChat ? 'active' : ''}`}
-          title={showChat ? 'Hide Chat' : 'Show Chat'}
-        >
-          <FontAwesomeIcon icon={faComments} size="lg" />
-        </button>
-      </div>
-      <div className="chat-toggle">
-        <button 
-          onClick={() => setShowChat(!showChat)}
-          className={`chat-toggle-btn ${showChat ? 'active' : ''}`}
-        >
-          {showChat ? 'Hide Chat' : 'Show Chat'}
-        </button>
-      </div>
-      {showChat && (
-        <div className="chat-section">
-          <Chat />
-        </div>
-      )}
+      
+      
       <div className="analysis-header">
-        <h1>AI-Based Agricultural Price Analysis</h1>
+        <h1>Agricultural Price Analysis</h1>
         <p>Track and analyze agricultural product prices in Bangladesh</p>
       </div>
 
-      <div className="analysis-filters">
+  <div className="analysis-filters">
         <div className="filter-group">
           <label>Location:</label>
           <select
@@ -207,6 +216,15 @@ const Analysis = () => {
             <option value="Dec">December</option>
           </select>
         </div>
+        <div className="filter-group">
+          <label>Season:</label>
+          <select value={season} onChange={e=>setSeason(e.target.value)} className="filter-select">
+            <option value="">Any</option>
+            <option value="Rabi">Rabi</option>
+            <option value="Kharif">Kharif</option>
+            <option value="Pre-Kharif">Pre-Kharif</option>
+          </select>
+        </div>
       </div>
 
       <div className="analysis-chart">
@@ -244,39 +262,43 @@ const Analysis = () => {
             <h3>Prediction Trend</h3>
             <p>{insights?.prediction?.trend === 'up' ? 'Expected Increase' : 'Expected Decrease'}</p>
           </div>
+          {insights?.forecastNext && (
+            <div className="insight-card">
+              <h3>Forecast (Model)</h3>
+              <p>{insights.forecastNext.price} BDT/kg <span className="text-xs block">CI {insights.forecastNext.ciLow}-{insights.forecastNext.ciHigh}</span></p>
+            </div>
+          )}
         </div>
       </div>
 
       <div className="ai-recommendations">
-        <h2>AI Recommendations</h2>
+        <h2>Intelligent Region Recommendations {usingBackend ? '' : '(Fallback)'}</h2>
         <div className="recommendation-cards">
-          {recommendations.map((rec, index) => (
+          {(usingBackend ? smartRecs : recommendations).map((rec, index) => (
             <div key={index} className="recommendation-card">
               <h3>{rec.product}</h3>
               <div className="recommendation-score">
                 <span>Score: {rec.score}%</span>
-                <div className="score-bar">
-                  <div className="score-fill" style={{ width: `${rec.score}%` }}></div>
-                </div>
+                <div className="score-bar"><div className="score-fill" style={{ width: `${rec.score}%` }}></div></div>
               </div>
-              <div className="recommendation-details">
-                <p>Climate Match: {rec.climateMatch ? '✅' : '❌'}</p>
-                <p>Soil Match: {rec.soilMatch ? '✅' : '❌'}</p>
-                <p>Rainfall Match: {rec.rainfallMatch ? '✅' : '❌'}</p>
-                <p>Seasonal Suitability: {rec.seasonality * 100}%</p>
-                <p>Profit Potential: {rec.profit * 100}%</p>
-                <p>Risk Level: {rec.risk * 100}%</p>
+              <div className="recommendation-details text-xs">
+                {rec.factors && (
+                  <>
+                    <p>Suitability: {(rec.factors.suitability*100).toFixed(0)}%</p>
+                    <p>Momentum: {(rec.factors.momentum*100).toFixed(0)}%</p>
+                    <p>Volatility: {(rec.factors.volatility*100).toFixed(1)}%</p>
+                    <p>Profit Potential: {(rec.factors.profitPotential*100).toFixed(0)}%</p>
+                  </>
+                )}
+                {rec.matches && (
+                  <p>Matches: {['climate','soil','rainfall'].filter(m=>rec.matches[m+'Match']).length}/3</p>
+                )}
+                {rec.forecast && <p>Next Price: {rec.forecast.price} (±{Math.round((rec.forecast.ciHigh-rec.forecast.ciLow)/2)})</p>}
               </div>
               <div className="recommendation-cta">
-                {rec.score >= 80 && (
-                  <button className="recommend-button">Highly Recommended</button>
-                )}
-                {rec.score >= 60 && rec.score < 80 && (
-                  <button className="recommend-button">Recommended</button>
-                )}
-                {rec.score < 60 && (
-                  <button className="recommend-button" disabled>Not Recommended</button>
-                )}
+                {rec.score >= 80 && (<button className="recommend-button">High</button>)}
+                {rec.score >= 60 && rec.score < 80 && (<button className="recommend-button">Medium</button>)}
+                {rec.score < 60 && (<button className="recommend-button" disabled>Low</button>)}
               </div>
             </div>
           ))}

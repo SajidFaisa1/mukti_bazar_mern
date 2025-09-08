@@ -151,6 +151,42 @@ export const VendorAuthProvider = ({ children }) => {
     }
   };
 
+  const updateProfile = async (profileData) => {
+    if (!user?.uid) {
+      throw new Error('User not authenticated');
+    }
+
+    try {
+      const updateData = {
+        uid: user.uid,
+        ...profileData
+      };
+
+      const response = await fetch(`http://localhost:5005/api/vendors/${user.uid}/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(updateData)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to update profile');
+      }
+
+      const updatedVendor = await response.json();
+      setUser(updatedVendor);
+      sessionStorage.setItem('vendorUser', JSON.stringify(updatedVendor));
+      
+      return updatedVendor;
+    } catch (error) {
+      console.error('Update profile error:', error);
+      throw error;
+    }
+  };
+
   const logout = async () => {
     // also clear any client artefacts so session is clean
     localStorage.removeItem('clientToken');
@@ -176,6 +212,7 @@ export const VendorAuthProvider = ({ children }) => {
     signupVendor,
     loginVendor,
     logout,
+    updateProfile,
     // aliases
     login: loginVendor,
     signup: signupVendor,

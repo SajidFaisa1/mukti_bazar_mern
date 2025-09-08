@@ -1,21 +1,31 @@
 // riskScoringService.js - centralized basic risk scoring rules
 // Can be extended later with ML or external signals.
 
-function scoreOrderContext({ total, subtotal, itemCount, quantityTotal, userOrderCount24h, deviceReuse, ipReuseUsers, flags, velocitySnapshot, negotiated, watchlistHits }) {
+function scoreOrderContext({ total, subtotal, itemCount, quantityTotal, totalStock, userOrderCount24h, deviceReuse, ipReuseUsers, flags, velocitySnapshot, negotiated, watchlistHits }) {
   let score = 0;
+  console.log(itemCount);
   const reasons = [];
 
   // Thresholds aligned with detectFraud (lower) so UI reasons appear consistently
   if (total > 20000) { score += 15; reasons.push('HIGH_VALUE'); }
   if (total > 50000) { score += 25; reasons.push('VERY_HIGH_VALUE'); }
   if (total > 100000) { score += 40; reasons.push('EXTREME_VALUE'); }
-  if (quantityTotal > 50) { score += 15; reasons.push('BULK_QTY'); }
-  if (quantityTotal > 100) { score += 25; reasons.push('BULK_QTY_HEAVY'); }
-  if (userOrderCount24h > 2) { score += 15; reasons.push('MULTI_ORDERS_24H'); }
-  if (userOrderCount24h > 5) { score += 30; reasons.push('RAPID_ORDERS_24H'); }
-  if (deviceReuse && deviceReuse.userCount > 2) { score += 20; reasons.push('DEVICE_REUSE'); }
-  if (deviceReuse && deviceReuse.userCount > 5) { score += 40; reasons.push('DEVICE_REUSE_HIGH'); }
-  if (ipReuseUsers && ipReuseUsers > 3) { score += 15; reasons.push('IP_SHARED'); }
+  
+  // Bulk quantity checks based on percentage of total stock
+  if (totalStock && totalStock > 0) {
+    const quantityPercentage = quantityTotal / totalStock;
+    if (quantityPercentage > 0.2) { score += 15; reasons.push('BULK_QTY'); }
+    if (quantityPercentage > 0.4) { score += 25; reasons.push('BULK_QTY_HEAVY'); }
+  } else {
+    // Fallback to absolute values if stock info is not available
+    if (quantityTotal > 50) { score += 2; reasons.push('BULK_QTY'); }
+    if (quantityTotal > 100) { score += 4; reasons.push('BULK_QTY_HEAVY'); }
+  }
+  if (userOrderCount24h > 2) { score += 10; reasons.push('MULTI_ORDERS_24H'); }
+  if (userOrderCount24h > 5) { score += 20; reasons.push('RAPID_ORDERS_24H'); }
+  if (deviceReuse && deviceReuse.userCount > 2) { score += 30; reasons.push('DEVICE_REUSE'); }
+  if (deviceReuse && deviceReuse.userCount > 5) { score += 50; reasons.push('DEVICE_REUSE_HIGH'); }
+  if (ipReuseUsers && ipReuseUsers > 3) { score += 20 ; reasons.push('IP_SHARED'); }
 
   if (flags && flags.length) {
     const highSev = flags.filter(f => ['high','critical'].includes(f.severity));

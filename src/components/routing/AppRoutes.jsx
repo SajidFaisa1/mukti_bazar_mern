@@ -41,6 +41,7 @@ const AdminLogin = lazy(() => import('../admin/AdminLogin'));
 const PlantDiseaseDetector = lazy(() => import('../PlantDiseaseDetector'));
 const VerificationPage = lazy(() => import('../verification/VerificationPage'));
 const DiscoverStoresPage = lazy(()=> import('../store/DiscoverStoresPage'));
+const AnnouncementsPage = lazy(() => import('../../pages/AnnouncementsPage'));
 
 // Components that don't need loading (simple/lightweight)
 import ProtectedRoute from '../auth/ProtectedRoute';
@@ -83,6 +84,12 @@ const AppRoutes = () => {
         <Route path="/plant-disease" element={
           <Suspense fallback={<LoadingFallback message="Loading disease detector..." />}>
             <PlantDiseaseDetector />
+          </Suspense>
+        } />
+        
+        <Route path="/announcements" element={
+          <Suspense fallback={<LoadingFallback message="Loading announcements..." />}>
+            <AnnouncementsPage />
           </Suspense>
         } />
         

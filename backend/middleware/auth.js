@@ -20,11 +20,21 @@ exports.protect = async (req, res, next) => {
       if (!admin) {
         return res.status(401).json({ error: 'Admin not found' });
       }
+      
+      // Check if admin account is enabled and active
+      if (!admin.enabled || admin.status !== 'active') {
+        return res.status(401).json({ error: 'Admin account is disabled or inactive' });
+      }
+      
       req.user = { 
         id: admin._id, 
         role: 'admin', 
+        adminRole: admin.role, // Store specific admin role (super_admin, admin, etc.)
         email: admin.email,
-        isAdmin: true
+        name: admin.name,
+        permissions: admin.permissions,
+        isAdmin: true,
+        adminData: admin // Full admin object for permission checking
       };
     } else if (decoded.role === 'vendor') {
       const vendor = await Vendor.findById(decoded.id).select('-password');
@@ -70,6 +80,30 @@ exports.permit = (...roles) => (req, res, next) => {
 exports.adminOnly = (req, res, next) => {
   if (req.user?.role !== 'admin') {
     return res.status(403).json({ error: 'Admin access required' });
+  }
+  next();
+};
+
+// Permission-based middleware
+exports.requirePermission = (permission) => (req, res, next) => {
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+  
+  const admin = req.user.adminData;
+  if (!admin || !admin.hasPermission(permission)) {
+    return res.status(403).json({ 
+      error: `Permission required: ${permission}` 
+    });
+  }
+  
+  next();
+};
+
+// Super admin only middleware
+exports.superAdminOnly = (req, res, next) => {
+  if (req.user?.role !== 'admin' || req.user?.adminRole !== 'super_admin') {
+    return res.status(403).json({ error: 'Super Admin access required' });
   }
   next();
 };

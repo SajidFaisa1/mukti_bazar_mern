@@ -308,4 +308,201 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET /api/vendors/customers - Get customers for a vendor (both users and other vendors who bought)
+router.get('/customers', protect, async (req, res) => {
+  try {
+    const vendorId = req.user.id;
+    const Order = require('../models/Order');
+    const User = require('../models/User');
+    
+    // Get all orders for this vendor
+    const orders = await Order.find({
+      'items.vendor': vendorId,
+      status: { $in: ['delivered', 'processing', 'shipped', 'confirmed'] }
+    }).populate('user', 'firstName lastName email phone address')
+      .populate('vendor', 'businessName email phone address')
+      .sort({ createdAt: -1 });
+
+    // Group orders by customer and calculate stats
+    const customerMap = new Map();
+
+    orders.forEach(order => {
+      let customerId, customerData, customerType;
+      
+      if (order.role === 'client' && order.user) {
+        customerId = order.user._id.toString();
+        customerType = 'user';
+        customerData = {
+          id: order.user._id,
+          name: `${order.user.firstName || ''} ${order.user.lastName || ''}`.trim(),
+          email: order.user.email,
+          phone: order.user.phone,
+          address: order.user.address,
+          type: 'User'
+        };
+      } else if (order.role === 'vendor' && order.vendor) {
+        customerId = order.vendor._id.toString();
+        customerType = 'vendor';
+        customerData = {
+          id: order.vendor._id,
+          name: order.vendor.businessName,
+          email: order.vendor.email,
+          phone: order.vendor.phone,
+          address: order.vendor.address,
+          type: 'Vendor'
+        };
+      }
+
+      if (customerId && customerData) {
+        if (!customerMap.has(customerId)) {
+          customerMap.set(customerId, {
+            ...customerData,
+            totalOrders: 0,
+            totalSpent: 0,
+            lastOrderDate: null,
+            firstOrderDate: null,
+            averageOrderValue: 0,
+            status: 'active',
+            customerType
+          });
+        }
+
+        const customer = customerMap.get(customerId);
+        customer.totalOrders++;
+        customer.totalSpent += order.totalAmount || 0;
+        
+        const orderDate = new Date(order.createdAt);
+        if (!customer.lastOrderDate || orderDate > customer.lastOrderDate) {
+          customer.lastOrderDate = orderDate;
+        }
+        if (!customer.firstOrderDate || orderDate < customer.firstOrderDate) {
+          customer.firstOrderDate = orderDate;
+        }
+      }
+    });
+
+    // Calculate average order value and determine status
+    const customers = Array.from(customerMap.values()).map(customer => {
+      customer.averageOrderValue = customer.totalOrders > 0 ? customer.totalSpent / customer.totalOrders : 0;
+      
+      // Determine if customer is active (ordered in last 3 months)
+      const threeMonthsAgo = new Date();
+      threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+      customer.status = customer.lastOrderDate > threeMonthsAgo ? 'active' : 'inactive';
+      
+      return customer;
+    });
+
+    // Sort by total spent descending
+    customers.sort((a, b) => b.totalSpent - a.totalSpent);
+
+    // Calculate summary stats
+    const stats = {
+      totalCustomers: customers.length,
+      activeCustomers: customers.filter(c => c.status === 'active').length,
+      totalUsers: customers.filter(c => c.customerType === 'user').length,
+      totalVendors: customers.filter(c => c.customerType === 'vendor').length,
+      averageOrderValue: customers.length > 0 ? customers.reduce((sum, c) => sum + c.averageOrderValue, 0) / customers.length : 0,
+      totalRevenue: customers.reduce((sum, c) => sum + c.totalSpent, 0)
+    };
+
+    res.json({
+      customers,
+      stats,
+      success: true
+    });
+
+  } catch (error) {
+    console.error('Error fetching customers:', error);
+    res.status(500).json({ error: 'Failed to fetch customers' });
+  }
+});
+
+// GET /api/vendors/customers/:customerId - Get detailed customer info
+router.get('/customers/:customerId', protect, async (req, res) => {
+  try {
+    const vendorId = req.user.id;
+    const customerId = req.params.customerId;
+    const { customerType } = req.query; // 'user' or 'vendor'
+    
+    const Order = require('../models/Order');
+    const User = require('../models/User');
+
+    // Get customer details
+    let customer;
+    if (customerType === 'user') {
+      customer = await User.findById(customerId);
+    } else if (customerType === 'vendor') {
+      customer = await Vendor.findById(customerId);
+    }
+
+    if (!customer) {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+
+    // Get customer's order history with this vendor
+    const orders = await Order.find({
+      $or: [
+        { user: customerId, role: 'client' },
+        { vendor: customerId, role: 'vendor' }
+      ],
+      'items.vendor': vendorId
+    }).populate('items.product', 'name images')
+      .sort({ createdAt: -1 });
+
+    // Calculate customer metrics
+    const totalSpent = orders.reduce((sum, order) => sum + (order.totalAmount || 0), 0);
+    const totalOrders = orders.length;
+    const averageOrderValue = totalOrders > 0 ? totalSpent / totalOrders : 0;
+
+    // Get favorite products
+    const productFrequency = {};
+    orders.forEach(order => {
+      order.items.forEach(item => {
+        const productName = item.name;
+        productFrequency[productName] = (productFrequency[productName] || 0) + item.quantity;
+      });
+    });
+
+    const favoriteProducts = Object.entries(productFrequency)
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 5)
+      .map(([name, quantity]) => ({ name, quantity }));
+
+    const customerDetails = {
+      id: customer._id,
+      name: customerType === 'user' ? 
+        `${customer.firstName || ''} ${customer.lastName || ''}`.trim() : 
+        customer.businessName,
+      email: customer.email,
+      phone: customer.phone,
+      address: customer.address,
+      type: customerType === 'user' ? 'User' : 'Vendor',
+      totalOrders,
+      totalSpent,
+      averageOrderValue,
+      firstOrderDate: orders.length > 0 ? orders[orders.length - 1].createdAt : null,
+      lastOrderDate: orders.length > 0 ? orders[0].createdAt : null,
+      favoriteProducts,
+      recentOrders: orders.slice(0, 10).map(order => ({
+        id: order._id,
+        orderNumber: order.orderNumber,
+        date: order.createdAt,
+        amount: order.totalAmount,
+        status: order.status,
+        itemCount: order.items.length
+      }))
+    };
+
+    res.json({
+      customer: customerDetails,
+      success: true
+    });
+
+  } catch (error) {
+    console.error('Error fetching customer details:', error);
+    res.status(500).json({ error: 'Failed to fetch customer details' });
+  }
+});
+
 module.exports = router;
