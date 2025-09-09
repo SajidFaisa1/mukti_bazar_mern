@@ -387,6 +387,7 @@ const VendorProfileCompletion = () => {
         phone: form.phone,
         description: form.description,
         profileCompleted: true,
+        isSubmitted: true,  // Add this flag to ensure vendor appears in admin approval section
         
         // Enhanced validation data
         businessRegistrationNumber: form.businessRegistrationNumber,

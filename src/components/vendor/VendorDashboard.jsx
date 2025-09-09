@@ -358,8 +358,8 @@ const VendorDashboard = () => {
 
   if (!user) return null;
 
-  // profile not completed
-  if (!user.profileCompleted) {
+  // Profile completion logic
+  if (!user.profileCompleted || !user.isSubmitted) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 text-center">
@@ -379,6 +379,54 @@ const VendorDashboard = () => {
             <UserIcon className="w-5 h-5 mr-2" />
             Complete Profile
           </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // Profile submitted but not approved yet
+  if (user.isSubmitted && !user.isApproved) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 text-center">
+          <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/20 rounded-full flex items-center justify-center mx-auto mb-6">
+            <ClockIcon className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+          </div>
+          <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-3">
+            Profile Under Review
+          </h3>
+          <p className="text-gray-600 dark:text-gray-400 mb-6">
+            Your profile has been submitted successfully and is currently under admin review. 
+            You will be notified once your profile is approved.
+          </p>
+          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-6">
+            <p className="text-sm text-blue-800 dark:text-blue-200">
+              <strong>Review Status:</strong> {user?.verificationStatus || 'Under Review'}
+            </p>
+            {user?.verificationLevel && (
+              <p className="text-sm text-blue-800 dark:text-blue-200 mt-1">
+                <strong>Verification Level:</strong> {user.verificationLevel.replace('_', ' ')}
+              </p>
+            )}
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <button 
+              onClick={() => window.location.reload()}
+              className="flex-1 inline-flex items-center justify-center px-4 py-2 bg-blue-100 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-medium rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/40 transition-colors"
+            >
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Refresh Status
+            </button>
+            <Link 
+              to="/vendor/profile"
+              className="flex-1 inline-flex items-center justify-center px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 font-medium rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+            >
+              <UserIcon className="w-4 h-4 mr-2" />
+              View Profile
+            </Link>
+          </div>
         </div>
       </div>
     );

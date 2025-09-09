@@ -20,6 +20,9 @@ import {
   Star,
   Zap,
   AlertCircle,
+  Clock,
+  AlertTriangle,
+  RefreshCw,
 } from "lucide-react"
 
 const VendorProducts = () => {
@@ -301,6 +304,76 @@ const VendorProducts = () => {
       Machinery: 'bg-sky-100 text-sky-700 ring-1 ring-sky-200'
     }
     return map[category] || 'bg-accent-100 text-accent-700 ring-1 ring-accent-200'
+  }
+
+  // Profile completion logic - prevent product management before approval
+  if (!user?.profileCompleted || !user?.isSubmitted) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8 text-center">
+          <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <AlertTriangle className="w-8 h-8 text-yellow-600" />
+          </div>
+          <h3 className="text-xl font-semibold text-gray-900 mb-3">
+            Complete Your Profile First
+          </h3>
+          <p className="text-gray-600 mb-6">
+            You need to complete your vendor profile before managing products.
+          </p>
+          <a 
+            href="/vendor/profile"
+            className="inline-flex items-center px-6 py-3 bg-teal-600 hover:bg-teal-700 text-white font-medium rounded-lg transition-colors"
+          >
+            <User className="w-5 h-5 mr-2" />
+            Complete Profile
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  // Profile submitted but not approved yet - prevent product management
+  if (user?.isSubmitted && !user?.isApproved) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8 text-center">
+          <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <Clock className="w-8 h-8 text-blue-600" />
+          </div>
+          <h3 className="text-xl font-semibold text-gray-900 mb-3">
+            Account Under Review
+          </h3>
+          <p className="text-gray-600 mb-6">
+            Your profile is under admin review. You'll be able to manage products once your account is approved.
+          </p>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <p className="text-sm text-blue-800">
+              <strong>Review Status:</strong> {user?.verificationStatus || 'Under Review'}
+            </p>
+            {user?.verificationLevel && (
+              <p className="text-sm text-blue-800 mt-1">
+                <strong>Verification Level:</strong> {user.verificationLevel.replace('_', ' ')}
+              </p>
+            )}
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <button 
+              onClick={() => window.location.reload()}
+              className="flex-1 inline-flex items-center justify-center px-4 py-2 bg-blue-100 text-blue-600 font-medium rounded-lg hover:bg-blue-200 transition-colors"
+            >
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Refresh Status
+            </button>
+            <a 
+              href="/vendor/dashboard"
+              className="flex-1 inline-flex items-center justify-center px-4 py-2 bg-gray-100 text-gray-600 font-medium rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              Back to Dashboard
+            </a>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (

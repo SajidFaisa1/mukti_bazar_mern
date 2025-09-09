@@ -9,7 +9,11 @@ import {
   Clock,
   Search,
   Filter,
-  MoreVertical
+  MoreVertical,
+  Plus,
+  X,
+  UserPlus,
+  User
 } from 'lucide-react';
 
 const AdminMessaging = ({ token }) => {
@@ -19,16 +23,23 @@ const AdminMessaging = ({ token }) => {
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showNewConversationModal, setShowNewConversationModal] = useState(false);
+  const [conversationSubject, setConversationSubject] = useState('');
+  const [selectedParticipants, setSelectedParticipants] = useState([]);
+  const [userSearch, setUserSearch] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [availableUsers, setAvailableUsers] = useState([]);
 
   useEffect(() => {
     if (token) {
       fetchConversations();
+      fetchAvailableUsers();
     }
   }, [token]);
 
   const fetchConversations = async () => {
     try {
-      const response = await fetch('/api/admin/communication/conversations', {
+      const response = await fetch('http://localhost:5005/api/admin/communication/conversations', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
@@ -43,9 +54,24 @@ const AdminMessaging = ({ token }) => {
     }
   };
 
+  const fetchAvailableUsers = async () => {
+    try {
+      const response = await fetch('http://localhost:5005/api/admin/users', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setAvailableUsers(data.users || []);
+      }
+    } catch (error) {
+      console.error('Error fetching users:', error);
+    }
+  };
+
   const fetchMessages = async (conversationId) => {
     try {
-      const response = await fetch(`/api/admin/communication/conversations/${conversationId}/messages`, {
+      const response = await fetch(`http://localhost:5005/api/admin/communication/conversations/${conversationId}/messages`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
@@ -62,15 +88,14 @@ const AdminMessaging = ({ token }) => {
     if (!newMessage.trim() || !activeConversation) return;
 
     try {
-      const response = await fetch(`/api/admin/communication/conversations/${activeConversation}/messages`, {
+      const response = await fetch(`http://localhost:5005/api/admin/communication/conversations/${activeConversation}/messages`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          message: newMessage,
-          type: 'admin_message'
+          content: newMessage
         })
       });
 
@@ -83,26 +108,60 @@ const AdminMessaging = ({ token }) => {
     }
   };
 
-  const createNewConversation = async (participants, subject) => {
+  const searchUsers = async (searchTerm) => {
     try {
-      const response = await fetch('/api/admin/communication/conversations', {
+      const response = await fetch(`http://localhost:5005/api/admin/users/search?q=${encodeURIComponent(searchTerm)}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setSearchResults(data.users || []);
+      }
+    } catch (error) {
+      console.error('Error searching users:', error);
+      setSearchResults([]);
+    }
+  };
+
+  const createNewConversation = async () => {
+    if (!selectedParticipants.length || !conversationSubject.trim()) {
+      alert('Please select participants and enter a subject');
+      return;
+    }
+
+    try {
+      const response = await fetch('http://localhost:5005/api/admin/communication/conversations', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          participants,
-          subject,
-          type: 'admin_internal'
+          participants: selectedParticipants,
+          subject: conversationSubject
         })
       });
 
       if (response.ok) {
-        fetchConversations();
+        const newConversation = await response.json();
+        setShowNewConversationModal(false);
+        setSelectedParticipants([]);
+        setConversationSubject('');
+        setUserSearch('');
+        setSearchResults([]);
+        await fetchConversations();
+        // Select the new conversation
+        if (newConversation.conversation) {
+          setActiveConversation(newConversation.conversation._id);
+          await fetchMessages(newConversation.conversation._id);
+        }
+      } else {
+        alert('Failed to create conversation');
       }
     } catch (error) {
       console.error('Error creating conversation:', error);
+      alert('Error creating conversation');
     }
   };
 
@@ -127,7 +186,10 @@ const AdminMessaging = ({ token }) => {
             <h2 className="text-2xl font-bold text-gray-900">Admin Communication</h2>
             <p className="text-gray-600 mt-1">Internal messaging and coordination</p>
           </div>
-          <button className="mt-4 sm:mt-0 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center">
+          <button 
+            onClick={() => setShowNewConversationModal(true)}
+            className="mt-4 sm:mt-0 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center"
+          >
             <MessageSquare className="w-4 h-4 mr-2" />
             New Conversation
           </button>
@@ -257,6 +319,153 @@ const AdminMessaging = ({ token }) => {
           )}
         </div>
       </div>
+
+      {/* New Conversation Modal */}
+      {showNewConversationModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">New Conversation</h3>
+              <button
+                onClick={() => {
+                  setShowNewConversationModal(false);
+                  setSelectedParticipants([]);
+                  setConversationSubject('');
+                  setUserSearch('');
+                  setSearchResults([]);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Subject Input */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Subject
+                </label>
+                <input
+                  type="text"
+                  value={conversationSubject}
+                  onChange={(e) => setConversationSubject(e.target.value)}
+                  placeholder="Enter conversation subject..."
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              {/* User Search */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Add Participants
+                </label>
+                <div className="relative">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    value={userSearch}
+                    onChange={(e) => {
+                      setUserSearch(e.target.value);
+                      if (e.target.value.length > 2) {
+                        searchUsers(e.target.value);
+                      } else {
+                        setSearchResults([]);
+                      }
+                    }}
+                    placeholder="Search users..."
+                    className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Search Results */}
+                {searchResults.length > 0 && (
+                  <div className="mt-2 border border-gray-200 rounded-lg max-h-40 overflow-y-auto">
+                    {searchResults.map(user => (
+                      <div
+                        key={user._id}
+                        onClick={() => {
+                          if (!selectedParticipants.find(p => p._id === user._id)) {
+                            setSelectedParticipants([...selectedParticipants, user]);
+                          }
+                          setUserSearch('');
+                          setSearchResults([]);
+                        }}
+                        className="p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                      >
+                        <div className="flex items-center">
+                          <User className="w-4 h-4 text-gray-400 mr-2" />
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">{user.name}</p>
+                            <p className="text-xs text-gray-500">{user.email}</p>
+                            <p className="text-xs text-gray-400 capitalize">{user.role}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Selected Participants */}
+              {selectedParticipants.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Selected Participants ({selectedParticipants.length})
+                  </label>
+                  <div className="space-y-1 max-h-32 overflow-y-auto">
+                    {selectedParticipants.map(participant => (
+                      <div
+                        key={participant._id}
+                        className="flex items-center justify-between bg-gray-50 rounded-lg p-2"
+                      >
+                        <div className="flex items-center">
+                          <User className="w-4 h-4 text-gray-400 mr-2" />
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">{participant.name}</p>
+                            <p className="text-xs text-gray-500 capitalize">{participant.role}</p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setSelectedParticipants(selectedParticipants.filter(p => p._id !== participant._id));
+                          }}
+                          className="text-red-400 hover:text-red-600"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowNewConversationModal(false);
+                  setSelectedParticipants([]);
+                  setConversationSubject('');
+                  setUserSearch('');
+                  setSearchResults([]);
+                }}
+                className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={createNewConversation}
+                disabled={!selectedParticipants.length || !conversationSubject.trim()}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white rounded-lg"
+              >
+                Create Conversation
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

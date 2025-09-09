@@ -476,4 +476,39 @@ router.get('/account-linking', protect, adminOnly, async (req, res) => {
   }
 });
 
+// Search users for messaging
+router.get('/search', protect, adminOnly, async (req, res) => {
+  try {
+    const { q } = req.query;
+    
+    if (!q || q.length < 2) {
+      return res.status(400).json({ error: 'Search query must be at least 2 characters' });
+    }
+
+    const users = await User.find({
+      $or: [
+        { firstName: { $regex: q, $options: 'i' } },
+        { lastName: { $regex: q, $options: 'i' } },
+        { email: { $regex: q, $options: 'i' } }
+      ]
+    })
+    .select('_id firstName lastName email role')
+    .limit(20);
+
+    // Format the response to include full name
+    const formattedUsers = users.map(user => ({
+      _id: user._id,
+      name: `${user.firstName} ${user.lastName}`.trim(),
+      email: user.email,
+      role: user.role
+    }));
+
+    res.json({ users: formattedUsers });
+
+  } catch (error) {
+    console.error('Error searching users:', error);
+    res.status(500).json({ error: 'Failed to search users' });
+  }
+});
+
 module.exports = router;

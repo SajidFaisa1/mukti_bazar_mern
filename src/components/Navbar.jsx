@@ -641,6 +641,18 @@ const Navbar = () => {
               >
                 Stores
               </Link>
+
+              {/* Plant Disease Detection */}
+              <Link 
+                to="/plant-disease" 
+                className={`px-5 py-2 rounded-full text-base font-medium transition-all duration-200 ${
+                  isActive('/plant-diagnosis') 
+                    ? 'bg-green-600 text-white shadow-md' 
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                Plant Doctor
+              </Link>
               
               <Link 
                 to="/analysis" 
@@ -791,6 +803,18 @@ const Navbar = () => {
                 }`}
               >
                 {t.deals}
+              </Link>
+
+              {/* Plant Disease Detection */}
+              <Link 
+                to="/plant-diagnosis" 
+                className={`px-3 py-1 rounded-full text-sm font-medium transition-all duration-200 ${
+                  isActive('/plant-diagnosis') 
+                    ? 'bg-green-600 text-white' 
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                🌱 Plant Doctor
               </Link>
               
               <Link 

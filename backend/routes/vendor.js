@@ -153,8 +153,12 @@ router.put('/:uid/profile', async (req, res) => {
     const { uid } = req.params;
     if (!uid) return res.status(400).json({ error: 'UID param required' });
 
-    // Start with incoming body and ensure the profileCompleted flag is true
-    const updates = { ...req.body, profileCompleted: true };
+    // Start with incoming body and ensure the profileCompleted and isSubmitted flags are true
+    const updates = { 
+      ...req.body, 
+      profileCompleted: true,
+      isSubmitted: true  // Add this flag so vendor appears in admin approval section
+    };
 
     // Re-use same helper to push any base64 images to Cloudinary
     const uploadIfNeeded = async (field) => {
@@ -193,7 +197,11 @@ router.patch('/profile', async (req, res) => {
       return res.status(400).json({ error: 'UID is required' });
     }
 
-    const updates = { ...req.body, profileCompleted: true };
+    const updates = { 
+      ...req.body, 
+      profileCompleted: true,
+      isSubmitted: true  // Add this flag so vendor appears in admin approval section
+    };
 
     // Upload base64 images to Cloudinary if provided
     const uploadIfNeeded = async (field) => {

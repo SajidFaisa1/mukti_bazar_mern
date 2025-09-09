@@ -928,4 +928,136 @@ publicRouter.post('/public/announcements/:id/react', async (req, res) => {
   }
 });
 
+// ==================== CONVERSATIONS ====================
+
+// Get all conversations
+router.get('/conversations', protect, adminOnly, async (req, res) => {
+  try {
+    // For now, return mock data since we don't have a Conversation model
+    // In production, this should fetch from database
+    const conversations = [
+      {
+        id: '1',
+        _id: '1',
+        subject: 'System Updates Discussion',
+        lastMessage: 'When will the new features be deployed?',
+        participants: [
+          { name: 'John Doe', role: 'vendor' },
+          { name: 'Admin User', role: 'admin' }
+        ],
+        updatedAt: new Date(),
+        unreadCount: 2
+      }
+    ];
+
+    res.json({
+      conversations,
+      total: conversations.length
+    });
+
+  } catch (error) {
+    console.error('Error fetching conversations:', error);
+    res.status(500).json({ error: 'Failed to fetch conversations' });
+  }
+});
+
+// Get messages for a conversation
+router.get('/conversations/:conversationId/messages', protect, adminOnly, async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    
+    // For now, return mock data
+    const messages = [
+      {
+        id: '1',
+        content: 'Hello, I need help with my vendor profile.',
+        senderName: 'John Doe',
+        isOwn: false,
+        createdAt: new Date(Date.now() - 60000)
+      },
+      {
+        id: '2',
+        content: 'Hi John! I can help you with that. What specific issue are you facing?',
+        senderName: 'Admin User',
+        isOwn: true,
+        createdAt: new Date()
+      }
+    ];
+
+    res.json({ messages });
+
+  } catch (error) {
+    console.error('Error fetching messages:', error);
+    res.status(500).json({ error: 'Failed to fetch messages' });
+  }
+});
+
+// Send a message
+router.post('/conversations/:conversationId/messages', protect, adminOnly, async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const { content } = req.body;
+
+    if (!content || !content.trim()) {
+      return res.status(400).json({ error: 'Message content is required' });
+    }
+
+    // In production, save to database
+    const newMessage = {
+      id: Date.now().toString(),
+      content: content.trim(),
+      senderName: req.user.firstName + ' ' + req.user.lastName,
+      senderId: req.user._id,
+      isOwn: true,
+      createdAt: new Date()
+    };
+
+    res.status(201).json({
+      message: 'Message sent successfully',
+      data: newMessage
+    });
+
+  } catch (error) {
+    console.error('Error sending message:', error);
+    res.status(500).json({ error: 'Failed to send message' });
+  }
+});
+
+// Create new conversation
+router.post('/conversations', protect, adminOnly, async (req, res) => {
+  try {
+    const { subject, participants } = req.body;
+
+    if (!subject || !subject.trim()) {
+      return res.status(400).json({ error: 'Conversation subject is required' });
+    }
+
+    if (!participants || !Array.isArray(participants) || participants.length === 0) {
+      return res.status(400).json({ error: 'At least one participant is required' });
+    }
+
+    // In production, save to database
+    const newConversation = {
+      _id: Date.now().toString(),
+      id: Date.now().toString(),
+      subject: subject.trim(),
+      participants: participants,
+      createdBy: req.user._id,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      lastMessage: null,
+      unreadCount: 0
+    };
+
+    res.status(201).json({
+      message: 'Conversation created successfully',
+      conversation: newConversation
+    });
+
+  } catch (error) {
+    console.error('Error creating conversation:', error);
+    res.status(500).json({ error: 'Failed to create conversation' });
+  }
+});
+
 module.exports = { adminRouter: router, publicRouter };
